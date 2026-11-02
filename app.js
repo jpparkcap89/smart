@@ -10,6 +10,34 @@ const rows=[
 ];
 function renderSchedule(period='all'){document.querySelector('#schedule').innerHTML=rows.filter(r=>period==='all'||r[0]===period).map(r=>`<div class="schedule-row"><span class="time">${r[1]}</span><div class="${r[2].length>1?'session-grid':''}">${r[2].map(s=>`<article class="session"><strong>${s[0]}</strong>${s[1]?`<p>${s[1]}</p>`:''}${s[2]?`<small>${s[2]}</small>`:''}</article>`).join('')}</div></div>`).join('')}
 renderSchedule();
+const phoneInput=document.querySelector('[name="phone"]');
+function phoneDigits(value){return value.normalize('NFKC').replace(/[^0-9]/g,'');}
+function formatPhone(value){
+  let digits=phoneDigits(value);
+  const prefixLength=digits.startsWith('02')?2:3;
+  digits=digits.slice(0,prefixLength+8);
+  if(digits.length<=prefixLength)return digits;
+  if(digits.length<=prefixLength+3)return digits.slice(0,prefixLength)+'-'+digits.slice(prefixLength);
+  const split=digits.length>prefixLength+7?prefixLength+4:prefixLength+3;
+  return digits.slice(0,prefixLength)+'-'+digits.slice(prefixLength,split)+'-'+digits.slice(split);
+}
+function normalizePhone(){
+  const cursor=phoneInput.selectionStart??phoneInput.value.length;
+  const digitsBeforeCursor=phoneDigits(phoneInput.value.slice(0,cursor)).length;
+  phoneInput.value=formatPhone(phoneInput.value);
+  let caret=0,count=0;
+  while(caret<phoneInput.value.length&&count<digitsBeforeCursor){if(/[0-9]/.test(phoneInput.value[caret]))count++;caret++;}
+  phoneInput.setSelectionRange(caret,caret);
+}
+phoneInput.addEventListener('input',e=>{if(!e.isComposing)normalizePhone();});
+phoneInput.addEventListener('compositionend',normalizePhone);
+phoneInput.addEventListener('blur',normalizePhone);
+phoneInput.addEventListener('beforeinput',e=>{
+  const start=phoneInput.selectionStart,end=phoneInput.selectionEnd;
+  if(start!==end)return;
+  if(e.inputType==='deleteContentBackward'&&phoneInput.value[start-1]==='-')phoneInput.setSelectionRange(start-1,start-1);
+  if(e.inputType==='deleteContentForward'&&phoneInput.value[start]==='-')phoneInput.setSelectionRange(start+1,start+1);
+});
 document.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-period]').forEach(x=>{x.classList.toggle('selected',x===b);x.setAttribute('aria-pressed',String(x===b))});renderSchedule(b.dataset.period)}));
 function route(){const raw=location.hash.slice(1)||'home';const id=['register','contact'].includes(raw)?raw:'home';document.querySelectorAll('.page').forEach(p=>p.classList.toggle('hidden',p.id!==id));document.querySelectorAll('[data-nav]').forEach(a=>{a.classList.toggle('active',a.dataset.nav===id);if(a.dataset.nav===id)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});if(raw==='program')requestAnimationFrame(()=>document.querySelector('#program').scrollIntoView());else window.scrollTo(0,0)}
 window.addEventListener('hashchange',route);route();

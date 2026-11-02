@@ -1,0 +1,31 @@
+# 2026 스마트교육 동계 페스티벌
+
+행사 안내·참가 신청·문의로 구성된 반응형 웹 앱 시안입니다.
+
+- 웹사이트: https://smart.cap89.com/
+- GitHub Pages: https://jpparkcap89.github.io/smart/
+- 행사: 2026년 11월 21일(토) 10:00–17:50, 목원대학교 사범관 4층
+
+## 현재 상태
+
+디자인 검토용 시안입니다. 입력 정보는 전송·저장되지 않습니다. 관리자 비밀번호는 4자 이상 입력 검증만 수행하며 실제 인증하지 않습니다. 수료증은 이름·소속 표기 미리보기만 제공합니다.
+
+## 구성
+
+`index.html`, `style.css`, `cap89.css`, `lucian-base.css`, `app.js`를 저장소 루트에서 정적 제공하며 별도 빌드가 필요하지 않습니다. 기존 `CNAME`을 유지합니다.
+
+## 디자인 및 라이선스
+
+CAP89 스타일의 Pretendard, 파스텔 그라데이션, 반투명 카드와 파란 버튼을 적용했습니다. 글꼴은 jsDelivr에서 불러오며, 연결이 안 되면 시스템 글꼴을 사용합니다.
+
+Lucian UX/UI Prompt 원본 요소 #002(참가 신청 버튼), #044(문의 아코디언)를 행사 내용과 CAP89 색상에 맞게 적용했습니다. 원본 출처 주석과 MIT 라이선스는 유지합니다. `LICENSE-LUCIAN.txt`를 참고하세요.
+
+- https://lucianlabs.dev/uxui-prompt/#002
+- https://lucianlabs.dev/uxui-prompt/#044
+- https://cap89.com/
+
+## 이후 구현
+
+프론트엔드는 GitHub Pages, 백엔드는 Google Apps Script, 데이터베이스는 Google Sheets를 사용할 예정입니다. Settings 시트의 `adminPassword`는 4자 이상이며 서버에서만 확인합니다. 실제 비밀번호나 신청자 데이터는 이 공개 저장소에 저장하지 않습니다.
+
+공개 접수 전 참가비·접수 기간·문의처·개인정보 처리 주체 및 보유 기간·출석과 수료 기준을 확정해야 합니다.

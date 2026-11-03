@@ -63,29 +63,26 @@ async function loadRegistrationSettings(){
 }
 if(registrationEnabled){
   document.querySelector('.draft-note').textContent='접수 가능 여부를 확인하고 있습니다.';
-  const retry=document.querySelector('#registration-retry');
-  retry.hidden=false;retry.addEventListener('click',loadRegistrationSettings);
   loadRegistrationSettings();
 }else{reviewButton.disabled=true;document.querySelector('#registration-status').textContent='접수 서버에 연결하지 못했습니다. 운영 사무국에 문의해 주세요.';}
 
-document.querySelector('#registration').addEventListener('submit',e=>{e.preventDefault();const f=e.currentTarget;for(const n of ['name','organization','email','phone','discovery','futureTopic']){f.elements[n].value=f.elements[n].value.trim();}if(!f.reportValidity())return;const data=new FormData(f);if(!registrationEnabled||!registrationSettings?.registrationEnabled)return;if(registrationEnabled&&data.get('consent')!=='동의합니다.'){document.querySelector('#registration-status').textContent='접수하려면 개인정보 수집·이용 동의가 필요합니다.';return;}document.querySelector('#registration-status').textContent='';const payload=Object.fromEntries(data);const signature=JSON.stringify(payload);if(signature!==lastRegistrationData){lastRegistrationData=signature;registrationPayload={...payload,requestId:crypto.randomUUID()};}const review=document.querySelector('#review');review.replaceChildren();for(const [key,label] of [['name','성명'],['organization','소속'],['email','이메일'],['phone','연락처'],['morningTrack','오전 트랙'],['afternoonTrack','오후 트랙'],['consent','개인정보 수집·이용'],['photoConsent','사진·동영상 촬영·활용'],['discovery','행사 인지 경로'],['futureTopic','향후 희망 주제'],['certificate','수료증 표기 확인']]){const dt=document.createElement('dt');dt.textContent=label;const dd=document.createElement('dd');dd.textContent=key==='certificate'?(data.has(key)?'확인했습니다.':'미확인'):data.get(key);review.append(dt,dd)}document.querySelector('#certificate-name').textContent=data.get('name');document.querySelector('#certificate-org').textContent=data.get('organization');document.querySelector('#complete-message').textContent='';document.querySelector('#registration-send').hidden=false;document.querySelector('#registration-send').textContent='최종 접수하기';document.querySelector('#confirmation').showModal()});
+document.querySelector('#registration').addEventListener('submit',e=>{e.preventDefault();const f=e.currentTarget;for(const n of ['name','organization','email','phone','discovery','futureTopic']){f.elements[n].value=f.elements[n].value.trim();}if(!f.reportValidity())return;const data=new FormData(f);if(!registrationEnabled||!registrationSettings?.registrationEnabled)return;if(registrationEnabled&&data.get('consent')!=='동의합니다.'){document.querySelector('#registration-status').textContent='접수하려면 개인정보 수집·이용 동의가 필요합니다.';return;}document.querySelector('#registration-status').textContent='';const payload=Object.fromEntries(data);const signature=JSON.stringify(payload);if(signature!==lastRegistrationData){lastRegistrationData=signature;registrationPayload={...payload,requestId:crypto.randomUUID()};}const review=document.querySelector('#review');review.replaceChildren();for(const [key,label] of [['name','성명'],['organization','소속'],['email','이메일'],['phone','연락처'],['morningTrack','오전 트랙'],['afternoonTrack','오후 트랙'],['consent','개인정보 수집·이용'],['photoConsent','사진·동영상 촬영·활용'],['discovery','행사 인지 경로'],['futureTopic','향후 희망 주제'],['certificate','수료증 표기 확인']]){const dt=document.createElement('dt');dt.textContent=label;const dd=document.createElement('dd');dd.textContent=key==='certificate'?(data.has(key)?'확인했습니다.':'미확인'):data.get(key);review.append(dt,dd)}document.querySelector('#certificate-name').textContent=data.get('name');document.querySelector('#certificate-org').textContent=data.get('organization');document.querySelector('#complete-message').textContent='';document.querySelector('#review-confirm').checked=false;document.querySelector('#registration-send').disabled=true;document.querySelector('#registration-send').hidden=false;document.querySelector('#registration-send').textContent='최종 접수하기';document.querySelector('#confirmation').showModal()});
 document.querySelector('#registration-send').addEventListener('click',async e=>{
   const button=e.currentTarget;
   const status=document.querySelector('#complete-message');
   if(!registrationEnabled){status.textContent='접수 서버에 연결하지 못했습니다. 운영 사무국에 문의해 주세요.';return;}
-  if(registrationBusy||!registrationPayload)return;
-  registrationBusy=true;document.querySelector('#confirmation .close').disabled=true;button.disabled=true;button.textContent='접수 저장 중…';status.textContent='저장 결과를 확인하고 있습니다.';
+  if(registrationBusy||!registrationPayload||!document.querySelector('#review-confirm').checked)return;
+  registrationBusy=true;document.querySelector('#review-confirm').disabled=true;document.querySelector('#registration-edit').disabled=true;document.querySelector('#confirmation .close').disabled=true;button.disabled=true;button.textContent='접수 저장 중…';status.textContent='저장 결과를 확인하고 있습니다.';
   document.querySelector('#confirmation').setAttribute('aria-busy','true');
   try{
     const result=await window.RegistrationAPI.send(registrationPayload,registrationSettings.consentVersion);
     status.textContent='✓ 참가 신청이 접수되었습니다. 접수번호: '+result.registrationId;
     button.hidden=true;
   }catch(error){status.textContent=error.message;}
-  finally{registrationBusy=false;document.querySelector('#confirmation .close').disabled=false;button.disabled=false;button.textContent='최종 접수하기';document.querySelector('#confirmation').removeAttribute('aria-busy');}
+  finally{registrationBusy=false;document.querySelector('#review-confirm').disabled=false;document.querySelector('#registration-edit').disabled=false;document.querySelector('#confirmation .close').disabled=false;button.disabled=!document.querySelector('#review-confirm').checked;button.textContent='최종 접수하기';document.querySelector('#confirmation').removeAttribute('aria-busy');}
 });
 document.querySelectorAll('dialog .close').forEach(b=>b.addEventListener('click',()=>b.closest('dialog').close()));
-document.querySelector('#admin-open').addEventListener('click',()=>document.querySelector('#admin').showModal());
-document.querySelector('#admin-form').addEventListener('submit',e=>{e.preventDefault();document.querySelector('#admin-status').textContent='✓ 4자 이상 입력 조건을 충족합니다. 저장·인증은 하지 않았습니다.';e.currentTarget.reset()});
+
 
 const posterDialog=document.querySelector('#poster-dialog');
 document.querySelector('#poster-open').addEventListener('click',()=>posterDialog.showModal());
@@ -96,3 +93,6 @@ posterImage.addEventListener('error',showPosterError);
 if(posterImage.complete&&!posterImage.naturalWidth)showPosterError();
 
 document.querySelector('#confirmation').addEventListener('cancel',e=>{if(registrationBusy)e.preventDefault();});
+
+document.querySelector('#review-confirm').addEventListener('change',e=>{document.querySelector('#registration-send').disabled=!e.currentTarget.checked;});
+document.querySelector('#registration-edit').addEventListener('click',()=>{document.querySelector('#confirmation').close();document.querySelector('#registration [name=name]').focus();});

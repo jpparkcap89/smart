@@ -21,6 +21,9 @@ with sync_playwright() as p:
             route.fulfill(content_type='application/json', headers={'access-control-allow-origin': '*'}, body=json.dumps({'ok': True, 'service': 'smart-festival-2026', 'registrationEnabled': True, 'privacyRetention': '행사 종료 후 1년', 'mediaUsageScope': '학회 홈페이지 행사 소개', 'consentVersion': 'test-v1'}))
             return
         data = json.loads(parse_qs(route.request.post_data)['payload'][0])
+        if data['action'] == 'getPublicContent':
+            route.fulfill(content_type='application/json', headers={'access-control-allow-origin': '*'}, body=json.dumps({'ok': True, 'content': {}}))
+            return
         requests.append(data)
         result = {'ok': False, 'message': '저장 실패. 다시 시도해 주세요.'} if len(requests) == 1 else {'ok': True, 'registrationId': data['requestId']}
         route.fulfill(content_type='application/json', headers={'access-control-allow-origin': '*'}, body=json.dumps(result))
@@ -45,6 +48,16 @@ with sync_playwright() as p:
     print('PASS: privacy refusal prevents submission')
     page.locator('[name="consent"]').first.check()
     page.locator('#registration [type="submit"]').click()
+    assert page.locator('#registration-send').is_disabled()
+    assert not requests
+    page.locator('#registration-edit').click()
+    assert not page.locator('#confirmation').is_visible()
+    assert page.locator('[name="name"]').input_value() == '테스트'
+    page.locator('#registration [type="submit"]').click()
+    assert not page.locator('#review-confirm').is_checked()
+    assert page.locator('#registration-send').is_disabled()
+    assert page.locator('#registration-retry').count() == 0
+    page.locator('#review-confirm').check()
     page.locator('#registration-send').click()
     page.wait_for_function("document.querySelector('#complete-message').textContent.includes('다시 시도')")
     assert '접수되었습니다' not in page.locator('#complete-message').inner_text()

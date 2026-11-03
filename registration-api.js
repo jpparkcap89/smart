@@ -30,6 +30,10 @@ window.RegistrationAPI = Object.freeze({
         typeof result.privacyRetention !== 'string' || !result.privacyRetention.trim()) {
       throw new Error('접수 안내를 불러오지 못했습니다. 운영 사무국에 문의해 주세요.');
     }
+    let capabilities;
+    try { capabilities = await this.request({method:'POST',body:new URLSearchParams({payload:JSON.stringify({action:'getCapabilities'})})}); }
+    catch (error) { if (/지원하지 않는 요청/.test(error.message)) throw new Error('접수 시스템 업데이트 중입니다. 잠시 후 다시 이용해 주세요.'); throw error; }
+    if (capabilities.idFormat !== '2026-000') throw new Error('접수 시스템 업데이트 중입니다. 잠시 후 다시 이용해 주세요.');
     return result;
   },
   async send(payload, consentVersion) {
@@ -44,7 +48,7 @@ window.RegistrationAPI = Object.freeze({
       method: 'POST',
       body: new URLSearchParams({payload: JSON.stringify({action: 'register', requestId, consentVersion, data})})
     });
-    if (result.registrationId !== requestId) throw new Error('저장 결과를 확인하지 못했습니다. 같은 화면에서 다시 시도해 주세요.');
+    if (result.requestId !== requestId || !/^2026-\d{3,}$/.test(result.registrationId || '')) throw new Error('저장 결과를 확인하지 못했습니다. 같은 화면에서 다시 시도해 주세요.');
     return result;
   }
 });

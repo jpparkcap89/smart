@@ -21,6 +21,7 @@
   let revision = null;
   let tab = 'registrations';
   let contentReady = false;
+  let editingRow=null;
   const required = new Set(['siteTitle','heroTitle1','heroTitle2','eventDate','eventTime','eventLocation','hostName','organizers','contactEmail','contactPhone','privacyRetention']);
   const message = text => { $('#admin-status').textContent = text; };
 
@@ -100,6 +101,7 @@
     dashboard.hidden = true;
     $('#admin-title').textContent = '관리자 로그인';
     $('#admin-list').replaceChildren();
+    if($('#admin-edit-dialog').open)$('#admin-edit-dialog').close();editingRow=null;
     $('#admin-count').textContent = '0';
     $('#admin-attendance').textContent = '0';
     $('#admin-cancelled').textContent = '—';
@@ -155,7 +157,7 @@
     const details=element('details');
     details.append(element('summary','신청 내용 상세 보기'));
     const list=element('dl');
-    for(const [label,value] of [['접수번호',row.id],['접수 시각',row.createdAt],['이메일',row.email],['오전 트랙',row.morningTrack],['오후 트랙',row.afternoonTrack],['촬영 활용',row.mediaConsent?'동의':'비동의'],['인지 경로',row.discoverySource],['희망 주제',row.futureTopics]]) list.append(element('dt',label),element('dd',value));
+    for(const [label,value] of [['접수 ID',row.id],['접수 시각',row.createdAt],['이메일',row.email],['오전 트랙',row.morningTrack],['오후 트랙',row.afternoonTrack],['촬영 활용',row.mediaConsent?'동의':'비동의'],['인지 경로',row.discoverySource],['희망 주제',row.futureTopics]]) list.append(element('dt',label),element('dd',value));
     details.append(list);card.append(details);
     const actions=element('div',undefined,'admin-person-actions');
     const attendance=element('button',row.attendance==='ATTENDED'?'출석 확인 취소':'출석 확인','button compact');
@@ -166,19 +168,51 @@
       const verb=row.status==='CANCELLED'?'복원':'취소';
       if(window.confirm(`${row.name} 님의 접수를 ${verb}하시겠습니까?`)) updateRegistration(row,{status:row.status==='CANCELLED'?'REGISTERED':'CANCELLED'},card);
     });
-    actions.append(attendance,status);card.append(actions);$('#admin-list').append(card);
+    const edit=element('button','신청 정보 수정','button compact');edit.type='button';edit.addEventListener('click',()=>openRegistrationEditor(row));
+    const remove=element('button','영구 삭제','button compact danger');remove.type='button';remove.addEventListener('click',()=>deleteRegistration(row,card));
+    actions.append(edit,attendance,status,remove);card.append(actions);$('#admin-list').append(card);
   }
 
   async function updateRegistration(row, updates, card) {
     const current=session;
     card.querySelectorAll('button').forEach(button=>{button.disabled=true;});
     try {
-      await authenticated('adminUpdateRegistration',{registrationId:row.id,updates});
+      await authenticated('adminUpdateRegistration',{registrationId:row.id,version:row.version,updates});
       if(current===session){message('접수 정보를 변경했습니다.');await loadList();}
     } catch(error) {
       if(current===session){message(error.message);card.querySelectorAll('button').forEach(button=>{button.disabled=false;});}
     }
   }
+
+  async function deleteRegistration(row,card){
+    if(!window.confirm(`${row.name} 님의 신청(${row.id})을 영구 삭제하시겠습니까? 삭제 후 복구할 수 없습니다.`))return;
+    const current=session;card.querySelectorAll('button').forEach(button=>button.disabled=true);
+    try{await authenticated('adminDeleteRegistration',{registrationId:row.id,version:row.version,confirm:true});if(current===session){message('신청을 영구 삭제했습니다.');await loadList();}}
+    catch(error){if(current===session){message(error.message);card.querySelectorAll('button').forEach(button=>button.disabled=false);}}
+  }
+  function openRegistrationEditor(row){
+    editingRow=row;const form=$('#admin-edit-form');form.reset();const container=$('#admin-edit-fields');container.replaceChildren();
+    const definitions=[['name','성명'],['organization','소속'],['email','이메일','email'],['phone','연락처','tel'],['morningTrack','오전 트랙','select'],['afternoonTrack','오후 트랙','select'],['mediaConsent','촬영 활용 동의','select'],['discoverySource','인지 경로','select'],['futureTopics','희망 주제','textarea']];
+    for(const [key,label,type] of definitions){
+      const wrapper=element('label',label);const input=element(type==='select'?'select':type==='textarea'?'textarea':'input');input.name=key;input.required=true;
+      if(type==='select'){
+        const sourceName=key==='discoverySource'?'discovery':key;
+        const options=key==='mediaConsent'?['동의합니다.','동의하지 않습니다.']:key==='discoverySource'?Array.from(document.querySelectorAll(`#registration [name=${sourceName}] option`)).map(node=>node.value).filter(Boolean):Array.from(document.querySelectorAll(`#registration [name=${sourceName}]`)).map(node=>node.value);
+        for(const value of options){const option=element('option',value);option.value=value;input.append(option);}
+      }else{if(type!=='textarea')input.type=type||'text';input.maxLength=key==='futureTopics'?2000:key==='name'?40:key==='organization'?100:150;if(type==='textarea')input.rows=4;}
+      input.value=key==='mediaConsent'?(row.mediaConsent?'동의합니다.':'동의하지 않습니다.'):row[key]||'';
+      wrapper.append(input);container.append(wrapper);
+    }
+    $('#admin-edit-status').textContent='';$('#admin-edit-form [type=submit]').disabled=false;$('#admin-edit-dialog').showModal();
+  }
+  $('#admin-edit-dialog').addEventListener('close',()=>{editingRow=null;$('#admin-edit-fields').replaceChildren();});
+  $('#admin-edit-form').addEventListener('submit',async event=>{
+    event.preventDefault();if(!editingRow||!event.currentTarget.reportValidity())return;
+    const row=editingRow,current=session,data=Object.fromEntries(new FormData(event.currentTarget));
+    const button=event.currentTarget.querySelector('[type=submit]');button.disabled=true;$('#admin-edit-status').textContent='저장 중입니다.';
+    try{await authenticated('adminEditRegistration',{registrationId:row.id,version:row.version,data});if(current===session){$('#admin-edit-dialog').close();message('신청 정보를 수정했습니다.');await loadList();}}
+    catch(error){if(current===session){$('#admin-edit-status').textContent=error.message;button.disabled=false;}}
+  });
 
   function buildContentForm(content) {
     const container=$('#admin-content-fields');container.replaceChildren();

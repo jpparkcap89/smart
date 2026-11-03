@@ -39,7 +39,7 @@ phoneInput.addEventListener('beforeinput',e=>{
   if(e.inputType==='deleteContentForward'&&phoneInput.value[start]==='-')phoneInput.setSelectionRange(start+1,start+1);
 });
 document.querySelectorAll('[data-period]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-period]').forEach(x=>{x.classList.toggle('selected',x===b);x.setAttribute('aria-pressed',String(x===b))});renderSchedule(b.dataset.period)}));
-function route(){const raw=location.hash.slice(1)||'home';const id=['register','contact'].includes(raw)?raw:'home';document.querySelectorAll('.page').forEach(p=>p.classList.toggle('hidden',p.id!==id));document.querySelectorAll('[data-nav]').forEach(a=>{a.classList.toggle('active',a.dataset.nav===id);if(a.dataset.nav===id)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});if(raw==='program')requestAnimationFrame(()=>document.querySelector('#program').scrollIntoView());else window.scrollTo(0,0)}
+function route(){const raw=location.hash.slice(1)||'home';const id=['register','contact','edit'].includes(raw)?raw:'home';document.querySelectorAll('.page').forEach(p=>p.classList.toggle('hidden',p.id!==id));document.querySelectorAll('[data-nav]').forEach(a=>{a.classList.toggle('active',a.dataset.nav===id);if(a.dataset.nav===id)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});if(raw==='program')requestAnimationFrame(()=>document.querySelector('#program').scrollIntoView());else window.scrollTo(0,0)}
 window.addEventListener('hashchange',route);route();
 let registrationPayload=null;
 let lastRegistrationData='';
@@ -76,7 +76,7 @@ document.querySelector('#registration-send').addEventListener('click',async e=>{
   document.querySelector('#confirmation').setAttribute('aria-busy','true');
   try{
     const result=await window.RegistrationAPI.send(registrationPayload,registrationSettings.consentVersion);
-    status.textContent='✓ 참가 신청이 접수되었습니다. 접수번호: '+result.registrationId;
+    status.textContent='✓ 참가 신청이 접수되었습니다. 접수 ID: '+result.registrationId;
     button.hidden=true;
   }catch(error){status.textContent=error.message;}
   finally{registrationBusy=false;document.querySelector('#review-confirm').disabled=false;document.querySelector('#registration-edit').disabled=false;document.querySelector('#confirmation .close').disabled=false;button.disabled=!document.querySelector('#review-confirm').checked;button.textContent='최종 접수하기';document.querySelector('#confirmation').removeAttribute('aria-busy');}

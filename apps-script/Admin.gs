@@ -1,7 +1,5 @@
-/* Add this file to the existing Apps Script project. No DB identifier or password belongs here.
- * In the existing doPost, immediately after `const req=JSON.parse(raw);`, add:
- * const adminResult=adminApi_(req);if(adminResult!==null)return output_(adminResult);
- */
+/* Add/update with Registration.gs and Participant.gs. See SERVER-UPDATE.md.
+ * No DB identifier or password belongs in this extension file. */
 const ADMIN_CONTENT_KEYS_ = ['siteTitle','heroTitle1','heroTitle2','heroIntro','eventDate','eventTime','eventLocation','hostName','organizers','contactEmail','contactPhone','privacyController','privacyRetention','mediaUsageScope','registrationEnabled'];
 
 function adminPublicContent_() {
@@ -12,12 +10,14 @@ function adminPublicContent_() {
 
 function adminApi_(req) {
   if (req.action === 'getPublicContent') return {ok:true, content:adminPublicContent_()};
-  if (['adminGetContent','adminSaveContent','adminList','adminUpdateRegistration'].indexOf(req.action) < 0) return null;
+  if (['adminGetContent','adminSaveContent','adminList','adminUpdateRegistration','adminEditRegistration','adminDeleteRegistration'].indexOf(req.action) < 0) return null;
   // The existing server verifies the password and applies its failure limit.
   adminSummary_(req);
   if (req.action === 'adminGetContent') return {ok:true, content:adminPublicContent_(), revision:settings_().adminContentRevision || ''};
   if (req.action === 'adminSaveContent') return adminSaveContent_(req);
   if (req.action === 'adminList') return adminList_(req);
+  if (req.action === 'adminEditRegistration') return adminEditRegistration_(req);
+  if (req.action === 'adminDeleteRegistration') return adminDeleteRegistration_(req);
   return adminUpdateRegistration_(req);
 }
 
@@ -73,7 +73,7 @@ function adminList_(req) {
   return {ok:true, page:page, pages:pages, total:matched.length,
     summary:{count:active.length,attendanceCount:active.filter(function(r) {return r[15]==='ATTENDED';}).length,cancelledCount:rows.length-active.length},
     registrations:matched.slice((page-1)*size,page*size).map(function(r) {return {
-      id:r[0],createdAt:r[1],name:r[2],organization:r[3],email:r[4],phone:r[5],morningTrack:r[6],afternoonTrack:r[7],
+      id:r[0],version:registrationVersion_(r),createdAt:r[1],name:r[2],organization:r[3],email:r[4],phone:r[5],morningTrack:r[6],afternoonTrack:r[7],
       mediaConsent:r[9]==='TRUE',discoverySource:r[10],futureTopics:r[11],attendance:r[15],status:r[17]
     };})};
 }
@@ -91,6 +91,7 @@ function adminUpdateRegistration_(req) {
     const index=rows.findIndex(function(r,i) {return i>0&&r[0]===req.registrationId;});
     if(index<0) throw new Error('신청 정보를 찾을 수 없습니다.');
     const row=rows[index], nextStatus=updates.status||row[17];
+    if(typeof req.version!=='string'||req.version!==registrationVersion_(row))throw new Error('신청 정보가 변경되었습니다. 다시 조회해 주세요.');
     if(nextStatus==='REGISTERED'&&rows.some(function(r,i) {return i>0&&i!==index&&r[4]===row[4]&&r[5]===row[5]&&r[17]==='REGISTERED';})) throw new Error('같은 연락처의 활성 접수가 있어 복원할 수 없습니다.');
     if(nextStatus==='CANCELLED'&&updates.attendance==='ATTENDED') throw new Error('취소된 신청은 출석 처리할 수 없습니다.');
     if(updates.attendance!==undefined) sheet.getRange(index+1,16).setValue(updates.attendance);
@@ -98,4 +99,32 @@ function adminUpdateRegistration_(req) {
     SpreadsheetApp.flush();
     return {ok:true,registrationId:req.registrationId};
   } finally {lock.releaseLock();}
+}
+
+function adminEditRegistration_(req){
+  const settings=settings_();
+  const d=validateRegistrationData_(Object.assign({},req.data,{consent:'동의합니다.',certificate:true}),settings,settings.consentVersion);
+  const lock=LockService.getScriptLock();if(!lock.tryLock(10000))throw new Error('잠시 후 다시 저장해 주세요.');
+  try{
+    const sheet=db_().getSheetByName('Registrations'),rows=sheet.getDataRange().getDisplayValues();
+    const index=rows.findIndex(function(row,i){return i>0&&row[0]===req.registrationId;});
+    if(index<0)throw new Error('신청 정보를 찾을 수 없습니다.');
+    const row=rows[index];if(typeof req.version!=='string'||req.version!==registrationVersion_(row))throw new Error('신청 정보가 변경되었습니다. 다시 조회해 주세요.');
+    if(row[17]==='REGISTERED'&&rows.some(function(r,i){return i>0&&i!==index&&r[4]===d.email&&r[5]===d.phone&&r[17]==='REGISTERED';}))throw new Error('같은 연락처의 활성 접수가 있습니다.');
+    row[2]=d.name;row[3]=d.organization;row[4]=d.email;row[5]=d.phone;row[6]=d.morningTrack;row[7]=d.afternoonTrack;row[9]=d.mediaConsent==='동의합니다.'?'TRUE':'FALSE';row[10]=d.discoverySource;row[11]=d.futureTopics;
+    // Preserve the applicant's original consent version and confirmation timestamp.
+    sheet.getRange(index+1,1,1,row.length).setNumberFormat('@').setValues([row.map(literal_)]);SpreadsheetApp.flush();return {ok:true,registrationId:row[0]};
+  }finally{lock.releaseLock();}
+}
+function adminDeleteRegistration_(req){
+  if(req.confirm!==true||typeof req.registrationId!=='string'||!/^2026-\d{3,}$/.test(req.registrationId))throw new Error('삭제할 접수 ID를 확인해 주세요.');
+  const lock=LockService.getScriptLock();if(!lock.tryLock(10000))throw new Error('잠시 후 다시 삭제해 주세요.');
+  try{
+    const sheet=db_().getSheetByName('Registrations'),rows=sheet.getDataRange().getDisplayValues();
+    const index=rows.findIndex(function(row,i){return i>0&&row[0]===req.registrationId;});
+    if(index<0)throw new Error('신청 정보를 찾을 수 없습니다.');
+    if(typeof req.version!=='string'||req.version!==registrationVersion_(rows[index]))throw new Error('신청 정보가 변경되었습니다. 다시 조회해 주세요.');
+    if(rows[index][18])PropertiesService.getScriptProperties().setProperty('deletedRequest:'+rows[index][18],'1');
+    sheet.deleteRow(index+1);SpreadsheetApp.flush();return {ok:true,registrationId:req.registrationId};
+  }finally{lock.releaseLock();}
 }

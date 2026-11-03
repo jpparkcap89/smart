@@ -7,7 +7,7 @@ BASE = 'http://127.0.0.1:8000'
 ENDPOINT = 'https://script.google.com/macros/s/test-deployment/exec'
 content = {}
 revision = ''
-row = {'id': 'test-id', 'name': '테스트 참가자', 'organization': '예시학교', 'email': 'test@example.com', 'phone': '010-1234-5678', 'createdAt': '2026-11-03', 'morningTrack': 'AM1', 'afternoonTrack': 'PM1', 'mediaConsent': False, 'discoverySource': '기타', 'futureTopics': '<script>unsafe()</script>', 'attendance': 'NOT_CHECKED', 'status': 'REGISTERED'}
+row = {'id': '2026-001', 'version': 'row-v1', 'name': '테스트 참가자', 'organization': '예시학교', 'email': 'test@example.com', 'phone': '010-1234-5678', 'createdAt': '2026-11-03', 'morningTrack': '[트랙 1] 초등 교수 학습  바이브 코딩 실습 (강사: 울산 화진초 석희철 / U402호)', 'afternoonTrack': '[트랙 1] 중등 교수학습 바이브 코딩 실습 (강사: 서울 신목중 김재현 / U402호)', 'mediaConsent': False, 'discoverySource': '기타', 'futureTopics': '<script>unsafe()</script>', 'attendance': 'NOT_CHECKED', 'status': 'REGISTERED'}
 calls = []
 
 with sync_playwright() as p:
@@ -28,6 +28,9 @@ with sync_playwright() as p:
         request = json.loads(parse_qs(route.request.post_data)['payload'][0])
         calls.append(request)
         action = request['action']
+        if action == 'getCapabilities':
+            reply({'ok': True, 'idFormat': '2026-000'})
+            return
         if action == 'getPublicContent':
             reply({'ok': True, 'content': content})
             return
@@ -37,10 +40,23 @@ with sync_playwright() as p:
         if action == 'adminSummary':
             reply({'ok': True, 'count': 1, 'attendanceCount': 0})
         elif action == 'adminList':
-            records = [row] if request['status'] in ['ALL', row['status']] else []
+            records = [row] if not row.get('deleted') and request['status'] in ['ALL', row['status']] else []
             reply({'ok': True, 'registrations': records, 'page': 1, 'pages': 1, 'total': len(records), 'summary': {'count': int(row['status'] == 'REGISTERED'), 'attendanceCount': int(row['attendance'] == 'ATTENDED'), 'cancelledCount': int(row['status'] == 'CANCELLED')}})
         elif action == 'adminUpdateRegistration':
+            assert request['version'] == row['version']
             row.update(request['updates'])
+            row['version'] += '-next'
+            reply({'ok': True, 'registrationId': row['id']})
+        elif action == 'adminEditRegistration':
+            assert request['version'] == row['version']
+            data = request['data']
+            row.update(data)
+            row['mediaConsent'] = data['mediaConsent'] == '동의합니다.'
+            row['version'] += '-edit'
+            reply({'ok': True, 'registrationId': row['id']})
+        elif action == 'adminDeleteRegistration':
+            assert request['confirm'] is True and request['version'] == row['version']
+            row['deleted'] = True
             reply({'ok': True, 'registrationId': row['id']})
         elif action == 'adminGetContent':
             reply({'ok': True, 'content': content, 'revision': revision})
@@ -76,6 +92,14 @@ with sync_playwright() as p:
     page.locator('#admin-search button').click()
     page.get_by_role('button', name='접수 복원', exact=True).click()
     page.wait_for_function("document.querySelector('#admin-count').textContent==='1'")
+    page.locator('#admin-search [name=status]').select_option('REGISTERED')
+    page.locator('#admin-search button').click()
+    page.get_by_role('button', name='신청 정보 수정', exact=True).click()
+    page.locator('#admin-edit-form [name=organization]').fill('수정 학교')
+    page.locator('#admin-edit-form [type=submit]').click()
+    page.wait_for_function("document.querySelector('#admin-list').textContent.includes('수정 학교')")
+    page.get_by_role('button', name='영구 삭제', exact=True).click()
+    page.wait_for_function("document.querySelectorAll('.admin-person').length===0")
     page.locator('[data-admin-tab=content]').click()
     page.wait_for_selector('#admin-content-form [name=siteTitle]')
     page.locator('#admin-content-form [name=siteTitle]').fill('수정한 행사명')

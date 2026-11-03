@@ -21,11 +21,14 @@ with sync_playwright() as p:
             route.fulfill(content_type='application/json', headers={'access-control-allow-origin': '*'}, body=json.dumps({'ok': True, 'service': 'smart-festival-2026', 'registrationEnabled': True, 'privacyRetention': '행사 종료 후 1년', 'mediaUsageScope': '학회 홈페이지 행사 소개', 'consentVersion': 'test-v1'}))
             return
         data = json.loads(parse_qs(route.request.post_data)['payload'][0])
+        if data['action'] == 'getCapabilities':
+            route.fulfill(content_type='application/json', headers={'access-control-allow-origin': '*'}, body=json.dumps({'ok': True, 'idFormat': '2026-000'}))
+            return
         if data['action'] == 'getPublicContent':
             route.fulfill(content_type='application/json', headers={'access-control-allow-origin': '*'}, body=json.dumps({'ok': True, 'content': {}}))
             return
         requests.append(data)
-        result = {'ok': False, 'message': '저장 실패. 다시 시도해 주세요.'} if len(requests) == 1 else {'ok': True, 'registrationId': data['requestId']}
+        result = {'ok': False, 'message': '저장 실패. 다시 시도해 주세요.'} if len(requests) == 1 else {'ok': True, 'registrationId': '2026-001', 'requestId': data['requestId']}
         route.fulfill(content_type='application/json', headers={'access-control-allow-origin': '*'}, body=json.dumps(result))
 
     page.route(ENDPOINT, api)
@@ -65,6 +68,8 @@ with sync_playwright() as p:
     page.locator('#registration-send').click()
     page.wait_for_function("document.querySelector('#complete-message').textContent.includes('참가 신청이 접수되었습니다')")
     assert page.locator('#registration-send').is_hidden()
+    assert '2026-001' in page.locator('#complete-message').inner_text()
+    assert requests[-1]['requestId'] not in page.locator('#complete-message').inner_text()
     assert len(requests) == 2
     assert requests[0]['requestId'] == requests[1]['requestId']
     assert requests[1]['data']['phone'] == '010-1234-5678'
@@ -81,6 +86,9 @@ with sync_playwright() as p:
     ]:
         page.unroute(ENDPOINT)
         def settings_reply(route):
+            if route.request.method == 'POST':
+                route.fulfill(content_type='application/json', headers={'access-control-allow-origin': '*'}, body=json.dumps({'ok': True, 'idFormat': '2026-000'}))
+                return
             route.fulfill(content_type='application/json', headers={'access-control-allow-origin': '*'}, body=json.dumps(reply))
         page.route(ENDPOINT, settings_reply)
         page.reload(wait_until='domcontentloaded')

@@ -1,6 +1,6 @@
 # 접수 DB 연결
 
-기존 배포를 사용하며 새 서버 코드 배포는 필요하지 않습니다. 기존 서버 원본과 실제 스프레드시트 ID는 공개 저장소에 포함하지 않습니다. 새 관리자 기능 확장 코드와 적용 방법은 [관리자 서버 업데이트](ADMIN-SETUP.md)를 참고하세요.
+기존 DB와 배포 주소를 유지합니다. 최신 순차 ID·신청자 수정·관리자 수정/삭제에는 [통합 서버 업데이트](SERVER-UPDATE.md)가 필요합니다. 기존 서버 원본과 실제 스프레드시트 ID는 공개 저장소에 포함하지 않습니다. 새 관리자 기능 확장 코드와 적용 방법은 [관리자 서버 업데이트](ADMIN-SETUP.md)를 참고하세요.
 
 - `registration-config.js`: 공개 웹 앱 배포 URL과 연결 활성 여부
 - `registration-api.js`: GET 설정 조회, POST 신청 저장
@@ -11,7 +11,7 @@ Apps Script는 **실행 사용자: 나 / 액세스 권한: 모든 사용자**로
 
 브라우저는 서버의 `consentVersion`, `privacyRetention`, `mediaUsageScope`, `registrationEnabled`를 읽습니다. POST는 `payload` 필드에 `{action:"register",requestId,consentVersion,data}` JSON을 넣습니다. data에는 name, organization, email, phone, morningTrack, afternoonTrack, consent, certificate(boolean), mediaConsent, discoverySource, futureTopics를 보냅니다.
 
-성공 응답의 registrationId가 요청 ID와 일치할 때만 완료를 표시합니다. 실패 후 같은 화면에서 재시도하면 같은 ID를 사용하여 중복 저장을 방지합니다. 동의 버전 변경·연락처 중복 등의 서버 오류는 신청자에게 안내합니다. 서버 설정을 불러오지 못하면 제출할 수 없습니다.
+성공 응답의 registrationId가 2026-001 형식이고 응답 requestId가 브라우저 요청키와 일치할 때 완료를 표시합니다. 실패 후 같은 화면에서 재시도하면 같은 ID를 사용하여 중복 저장을 방지합니다. 동의 버전 변경·연락처 중복 등의 서버 오류는 신청자에게 안내합니다. 서버 설정을 불러오지 못하면 제출할 수 없습니다.
 
 검증 명령:
 

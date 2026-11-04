@@ -31,7 +31,7 @@ with sync_playwright() as p:
     page.route(ENDPOINT, api)
     page.goto(BASE + '/#register', wait_until='domcontentloaded')
     for key, value in {'name': '테스트', 'organization': '예시학교', 'email': 'test@example.com', 'phone': '01012345678', 'futureTopic': 'AI 교육'}.items():
-        page.locator(f'[name="{key}"]').fill(value)
+        page.locator(f'#registration [name="{key}"]').fill(value)
     page.wait_for_function("!document.querySelector('#registration [type=submit]').disabled")
     page.locator('[name="discovery"]').select_option('지인 추천')
     page.locator('[name="certificate"]').check()
@@ -52,7 +52,7 @@ with sync_playwright() as p:
     assert not requests
     page.locator('#registration-edit').click()
     assert not page.locator('#confirmation').is_visible()
-    assert page.locator('[name="name"]').input_value() == '테스트'
+    assert page.locator('#registration [name="name"]').input_value() == '테스트'
     page.locator('#registration [type="submit"]').click()
     assert not page.locator('#review-confirm').is_checked()
     assert page.locator('#registration-send').is_disabled()

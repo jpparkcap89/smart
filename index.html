@@ -7,7 +7,7 @@
 
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="lucian-base.css">
-  <link rel="stylesheet" href="cap89.css?v=admin-session-30-2">
+  <link rel="stylesheet" href="cap89.css?v=check-1">
 </head>
 
 <body>
@@ -23,6 +23,7 @@
     <nav aria-label="주 메뉴">
       <a href="#home" data-nav="home">행사 안내</a>
       <a href="#register" data-nav="register">참가 신청</a>
+      <a href="#check" data-nav="check">신청 확인</a>
       <a href="#contact" data-nav="contact">문의</a>
     </nav>
 
@@ -544,6 +545,8 @@
           아래 정보를 정확하게 입력해 주세요.
         </p>
 
+        <p class="check-link">이미 신청하셨나요? <a class="text-link" href="#check">신청 내역 확인·수정 →</a></p>
+
         <div class="side-note">
           <strong data-content="eventDate">2026. 11. 21. (토)</strong>
           <p>
@@ -636,7 +639,7 @@
             <input
               type="radio"
               name="morningTrack"
-              value="[트랙 1] 초등 교수 학습  바이브 코딩 실습 (강사: 울산 화진초 석희철 / U402호)"
+              value="[트랙 1] 초등 교수 학습 바이브 코딩 실습 (강사: 울산 화진초 석희철 / U402호)"
               required
             >
             <span>
@@ -648,7 +651,7 @@
             <input
               type="radio"
               name="morningTrack"
-              value="[트랙 2] 캔바 AI를 활용한 실습 (강사:(주) 오늘배움 주방현 / U411호)"
+              value="[트랙 2] 캔바 AI를 활용한 실습 (강사: ㈜오늘배움 주방현 / U411호)"
               required
             >
             <span>
@@ -660,7 +663,7 @@
             <input
               type="radio"
               name="morningTrack"
-              value="[트랙 3] 대학생 글쓰기에서의 생성현 AI활용 및 인식비교연구 목원대 성창규외 3인 /(U 403호)"
+              value="[트랙 3] 대학생 글쓰기에서의 생성형 AI 활용 및 인식 비교 연구 (강사: 목원대 성창규 외 3인 / U403호)"
               required
             >
             <span>
@@ -700,7 +703,7 @@
             <input
               type="radio"
               name="afternoonTrack"
-              value="[트랙 3] AI를 활용하는 액션러닝 수업설계 목원대 이선희/(U 403호)"
+              value="[트랙 3] AI를 활용하는 액션러닝 수업설계 (강사: 목원대 이선희 / U403호)"
               required
             >
             <span>
@@ -833,6 +836,59 @@
           disabled
         >신청 내용 확인하기 ↗</button>
       </form>
+    </section>
+
+    <!-- 신청 확인·수정 -->
+    <section id="check" class="page hidden form-page">
+      <div class="form-intro">
+        <p class="eyebrow">MY REGISTRATION</p>
+        <h1>신청 내역을<br>확인해 보세요</h1>
+
+        <p>
+          신청할 때 입력한 성명과<br>
+          휴대폰 번호 뒤 4자리로 확인합니다.
+        </p>
+
+        <div class="side-note mint">
+          <strong>바꿀 수 있는 항목</strong>
+          <p>성명, 소속, 오전·오후 트랙, 촬영 동의, 희망 주제를 고치거나 신청을 취소할 수 있습니다.</p>
+          <small>이메일과 연락처 변경은 운영 사무국으로 문의해 주세요.</small>
+        </div>
+
+        <div class="side-note">
+          <strong>🔒 개인정보 보호</strong>
+          <p>이메일과 연락처는 일부만 표시합니다. 내용이 바뀌면 신청 때 입력한 이메일로 안내 메일을 보냅니다.</p>
+        </div>
+      </div>
+
+      <div class="form-card check-card">
+        <form id="check-form" novalidate>
+          <div class="form-title">
+            <h2>본인 확인</h2>
+            <span>* 필수 입력</span>
+          </div>
+
+          <div class="fields">
+            <label>
+              성명 *
+              <input name="name" autocomplete="name" maxlength="40" placeholder="신청할 때 입력한 성명" required>
+            </label>
+
+            <label>
+              휴대폰 번호 뒤 4자리 *
+              <input name="phoneLast4" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]{4}" placeholder="예: 5678" required>
+            </label>
+          </div>
+
+          <p id="check-status" class="check-status" role="status" aria-live="polite"></p>
+
+          <button class="button dark full-button" type="submit">
+            신청 내역 확인하기 ↗
+          </button>
+        </form>
+
+        <div id="check-result" hidden></div>
+      </div>
     </section>
 
     <!-- 문의 -->
@@ -1508,7 +1564,8 @@
 
   <script src="registration-config.js?v=2"></script>
   <script src="registration-api.js?v=2"></script>
-  <script src="app.js?v=admin-2"></script>
+  <script src="app.js?v=check-1"></script>
   <script src="admin.js?v=admin-session-30-2"></script>
+  <script src="my-registration.js?v=1"></script>
 </body>
 </html>

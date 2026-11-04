@@ -198,3 +198,16 @@ textarea:focus-visible{outline:2px solid var(--primary);outline-offset:3px}
 
 /* 휴대폰처럼 좁은 화면에서는 주관 기관명이 잘리지 않도록 줄바꿈을 허용 */
 @media(max-width:600px){.co-organizers strong,.event-facts [data-content="organizers"]{white-space:normal;overflow-x:visible}}
+
+/* 신청 내역 확인·수정 */
+.check-link{margin-top:14px;font-size:14px;color:var(--muted,#667085)}
+.check-status{min-height:1.4em;margin:12px 0;font-size:14px;font-weight:600;color:var(--primary)}
+.check-registration{display:block}
+.check-registration+.check-registration{margin-top:28px;padding-top:28px;border-top:1px solid var(--line)}
+.check-summary{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 20px;padding:14px 16px;border-radius:12px;background:var(--surface-2,#f5f7fb);font-size:14px}
+.check-summary dt{color:var(--muted,#667085)}
+.check-summary dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+.check-registration .written-answer textarea{width:100%}
+.check-registration .review-actions{margin-top:18px}
+.check-reset{display:inline-block;margin-top:20px;border:0;background:none;padding:0;cursor:pointer;font:inherit}
+@media(max-width:600px){nav a{font-size:13px}}

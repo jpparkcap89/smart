@@ -195,3 +195,6 @@ textarea:focus-visible{outline:2px solid var(--primary);outline-offset:3px}
 .ux.u002{width:100%;max-width:340px}
 .ux.u044{width:100%;max-width:350px;height:auto;min-height:400px}
 @media(max-width:400px){.ux.u002{height:auto;padding:24px 0}.u002 .u002-btn{padding-left:22px;gap:12px}.u002 .u002-txt{font-size:17px}.ux.u044{min-height:0}}
+
+/* 휴대폰처럼 좁은 화면에서는 주관 기관명이 잘리지 않도록 줄바꿈을 허용 */
+@media(max-width:600px){.co-organizers strong,.event-facts [data-content="organizers"]{white-space:normal;overflow-x:visible}}

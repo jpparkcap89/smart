@@ -52,3 +52,146 @@ textarea{display:block;width:100%;margin-top:8px;padding:14px;border:1px solid r
 textarea:focus-visible{outline:2px solid var(--primary);outline-offset:3px}
 #review dd{overflow-wrap:anywhere;white-space:pre-wrap}
 @media(max-width:600px){.festival-poster{max-width:380px;padding:12px}#poster-dialog{padding:16px}.poster-toolbar{top:-16px}.form-group{padding:12px}.consent-options{display:block}}
+
+
+/* 관리자 신청자 목록 · 주관 기관명 한 줄 표시 (admin.js에 섞여 있던 스타일 이전) */
+/* 관리자 신청자 목록 */
+#admin-list {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+#admin-list .admin-person {
+  min-width: 960px;
+  padding: 14px;
+  margin: 10px 0;
+}
+
+#admin-list .admin-person details {
+  margin: 0;
+}
+
+#admin-list .admin-person-row {
+  display: grid;
+  grid-template-columns: 130px 160px minmax(230px, 1fr) 340px;
+  align-items: center;
+  gap: 16px;
+  list-style: none;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+#admin-list .admin-person-row::-webkit-details-marker {
+  display: none;
+}
+
+#admin-list .admin-person-name,
+#admin-list .admin-person-organization,
+#admin-list .admin-person-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+#admin-list .admin-person-name {
+  font-weight: 700;
+}
+
+#admin-list .admin-person-email {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+#admin-list .admin-person-phone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+#admin-list .admin-person-phone .button {
+  padding: 7px 10px;
+  font-size: 12px;
+  box-shadow: none;
+}
+
+#admin-list .admin-person-phone .button:hover {
+  color: white;
+}
+
+#admin-list .admin-person details[open] > .admin-person-row {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+#admin-list .admin-person-row:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* 주관 기관명 한 줄 표시 */
+.co-organizers {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.co-organizers strong {
+  min-width: 0;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.event-facts {
+  grid-template-columns:
+    minmax(0, .85fr)
+    minmax(0, 1fr)
+    minmax(0, 1.7fr);
+}
+
+.event-facts > div,
+.event-facts p {
+  min-width: 0;
+}
+
+.event-facts p {
+  flex: 1;
+}
+
+.event-facts [data-content="organizers"] {
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+@media (min-width: 851px) and (max-width: 1150px) {
+  .event-facts {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .event-facts > div:last-child {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    margin-top: 18px;
+  }
+
+  .event-facts > div:nth-child(2) {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 850px) {
+  .event-facts {
+    grid-template-columns: 1fr;
+  }
+}
+  
+
+/* 좁은 화면에서 신청 버튼·FAQ가 가로로 넘치지 않도록 */
+.hero-copy,.faq-slot,.contact-grid>*{min-width:0}
+.ux.u002{width:100%;max-width:340px}
+.ux.u044{width:100%;max-width:350px;height:auto;min-height:400px}
+@media(max-width:400px){.ux.u002{height:auto;padding:24px 0}.u002 .u002-btn{padding-left:22px;gap:12px}.u002 .u002-txt{font-size:17px}.ux.u044{min-height:0}}

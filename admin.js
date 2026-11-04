@@ -1,2547 +1,899 @@
-<!doctype html>
-<html lang="ko" data-theme="light">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>2026 스마트교육 동계 페스티벌</title>
+(() => {
+  'use strict';
 
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="lucian-base.css">
-  <link rel="stylesheet" href="cap89.css?v=organizers-line-1">
+  const $ = selector => document.querySelector(selector);
 
-  <style>
-    /* 관리자 신청자 목록 */
-    #admin-list {
-      max-width: 100%;
-      overflow-x: auto;
+  const dialog = $('#admin');
+  const dashboard = $('#admin-dashboard');
+  const loginForm = $('#admin-form');
+
+  const SESSION_DURATION = 30 * 60 * 1000;
+
+  const fields = [
+    ['siteTitle', '행사명'],
+    ['heroTitle1', '메인 제목 첫 줄'],
+    ['heroTitle2', '메인 제목 둘째 줄'],
+    ['heroIntro', '행사 소개', 'textarea'],
+    ['eventDate', '행사 날짜'],
+    ['eventTime', '행사 시간'],
+    ['eventLocation', '행사 장소'],
+    ['hostName', '주최'],
+    ['organizers', '주관', 'textarea'],
+    ['contactEmail', '문의 이메일', 'email'],
+    ['contactPhone', '문의 전화번호', 'tel'],
+    ['privacyController', '개인정보 처리 주체'],
+    ['privacyRetention', '개인정보 보유 기간'],
+    ['mediaUsageScope', '사진·동영상 촬영 및 활용 범위', 'textarea'],
+    ['registrationEnabled', '참가 신청 접수', 'select']
+  ];
+
+  const required = new Set([
+    'siteTitle',
+    'heroTitle1',
+    'heroTitle2',
+    'eventDate',
+    'eventTime',
+    'eventLocation',
+    'hostName',
+    'organizers',
+    'contactEmail',
+    'contactPhone',
+    'privacyRetention'
+  ]);
+
+  let password = '';
+  let session = 0;
+  let timer;
+  let sessionExpiresAt = 0;
+
+  let page = 1;
+  let pages = 1;
+  let listRequest = 0;
+  let revision = null;
+  let tab = 'registrations';
+  let contentReady = false;
+
+  function message(text) {
+    $('#admin-status').textContent = text;
+  }
+
+  function element(tag, text, className) {
+    const node = document.createElement(tag);
+
+    if (text !== undefined) {
+      node.textContent = text;
     }
 
-    #admin-list .admin-person {
-      min-width: 960px;
-      padding: 14px;
-      margin: 10px 0;
+    if (className) {
+      node.className = className;
     }
 
-    #admin-list .admin-person details {
-      margin: 0;
+    return node;
+  }
+
+  function actionLink(text, href) {
+    const link = element('a', text, 'button compact');
+    link.href = href;
+    return link;
+  }
+
+  function phoneNumber(value) {
+    return String(value || '').replace(/[^+0-9]/g, '');
+  }
+
+  // 로그인 상태 관리
+  function hasSession() {
+    if (!password) {
+      return false;
     }
 
-    #admin-list .admin-person-row {
-      display: grid;
-      grid-template-columns: 130px 160px minmax(230px, 1fr) 340px;
-      align-items: center;
-      gap: 16px;
-      list-style: none;
-      color: var(--ink);
-      font-size: 13px;
-      font-weight: 400;
+    if (Date.now() >= sessionExpiresAt) {
+      logout(
+        '로그인 후 30분이 지나 로그아웃되었습니다. 다시 로그인해 주세요.'
+      );
+      return false;
     }
 
-    #admin-list .admin-person-row::-webkit-details-marker {
-      display: none;
-    }
-
-    #admin-list .admin-person-name,
-    #admin-list .admin-person-organization,
-    #admin-list .admin-person-email {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      min-width: 0;
-    }
-
-    #admin-list .admin-person-name {
-      font-weight: 700;
-    }
-
-    #admin-list .admin-person-email {
-      color: var(--primary);
-      text-decoration: underline;
-      text-underline-offset: 3px;
-    }
-
-    #admin-list .admin-person-phone {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      white-space: nowrap;
-    }
-
-    #admin-list .admin-person-phone .button {
-      padding: 7px 10px;
-      font-size: 12px;
-      box-shadow: none;
-    }
-
-    #admin-list .admin-person-phone .button:hover {
-      color: white;
-    }
-
-    #admin-list .admin-person details[open] > .admin-person-row {
-      padding-bottom: 14px;
-      border-bottom: 1px solid var(--hairline);
-    }
-
-    #admin-list .admin-person-row:focus-visible {
-      outline: 2px solid var(--primary);
-      outline-offset: 4px;
-      border-radius: 4px;
-    }
-
-    /* 주관 기관명 한 줄 표시 */
-    .co-organizers {
-      max-width: 100%;
-      min-width: 0;
-    }
-
-    .co-organizers strong {
-      min-width: 0;
-      white-space: nowrap;
-      overflow-x: auto;
-    }
-
-    .event-facts {
-      grid-template-columns:
-        minmax(0, .85fr)
-        minmax(0, 1fr)
-        minmax(0, 1.7fr);
-    }
-
-    .event-facts > div,
-    .event-facts p {
-      min-width: 0;
-    }
-
-    .event-facts p {
-      flex: 1;
-    }
-
-    .event-facts [data-content="organizers"] {
-      white-space: nowrap;
-      overflow-x: auto;
-    }
-
-    @media (min-width: 851px) and (max-width: 1150px) {
-      .event-facts {
-        grid-template-columns: 1fr 1fr;
-      }
-
-      .event-facts > div:last-child {
-        grid-column: 1 / -1;
-        border-top: 1px solid var(--line);
-        padding-top: 18px;
-        margin-top: 18px;
-      }
-
-      .event-facts > div:nth-child(2) {
-        border-right: 0;
-      }
-    }
-
-    @media (max-width: 850px) {
-      .event-facts {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
-</head>
-
-<body>
-  <header>
-    <a class="brand" href="#home">
-      <span class="brand-icon">S</span>
-      <span>
-        스마트교육학회
-        <small>SMART EDUCATION SOCIETY</small>
-      </span>
-    </a>
-
-    <nav aria-label="주 메뉴">
-      <a href="#home" data-nav="home">행사 안내</a>
-      <a href="#register" data-nav="register">참가 신청</a>
-      <a href="#contact" data-nav="contact">문의</a>
-    </nav>
-
-    <a class="button dark header-cta" href="#register">
-      참가 신청 ↗
-    </a>
-  </header>
-
-  <main>
-    <!-- 행사 안내 -->
-    <div id="home" class="page">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">✨ 2026 WINTER FESTIVAL</p>
-
-          <p class="hero-kicker" data-content="siteTitle">
-            2026 동계 페스티벌 및 공동 학술 발표 대회
-          </p>
-
-          <h1>
-            <span class="headline-main" data-content="heroTitle1">AI 시대, 무엇을 가르치고</span><br>
-            <span data-content="heroTitle2">무엇을 배울 것인가?</span>
-          </h1>
-
-          <p class="intro content-multiline" data-content="heroIntro">수업의 질문에서 시작하는 교육의 변화.<br>직접 경험하고, 함께 나누며 내일의 교실을 만납니다.</p>
-
-          <div class="hero-actions">
-            <!--
-              Lucian UX/UI Prompt #002
-              MIT License (c) 2026 Seokwoooo
-              https://lucianlabs.dev/uxui-prompt/#002
-
-              Element: 자석 화살표 버튼
-              ID: 002
-              Category: 버튼
-              Tags: button, magnetic, cta, hover, arrow
-
-              What it does:
-              커서를 따라 버튼과 글자가 서로 다른 깊이로 끌려옵니다.
-              올리면 오른쪽 원이 버튼 전체로 번지고,
-              누르면 화살표가 빠져나갔다 반대편에서 돌아옵니다.
-
-              How to use it:
-              버튼 위에서 커서를 천천히 움직이고 눌러 보세요.
-
-              Footprint: fixed size, square
-              Needs:
-              tokens.css
-              (the --ux-* theme tokens and the .ux base).
-              Map the tokens to the project's theme variables.
-            -->
-
-            <style>
-              .u002 {
-                --bg: #16151b;
-                --fg: #f7f5f0;
-                --blob: linear-gradient(
-                  135deg,
-                  #8b6cff,
-                  #4f8dff 60%,
-                  #2fc7b4
-                );
-                position: relative;
-                width: 340px;
-                height: 200px;
-                display: grid;
-                place-items: center;
-              }
-
-              @media (prefers-color-scheme: dark) {
-                :root:not([data-theme="light"]) .u002 {
-                  --bg: #f4f0e8;
-                  --fg: #121117;
-                }
-              }
-
-              :root[data-theme="dark"] .u002 {
-                --bg: #f4f0e8;
-                --fg: #121117;
-              }
-
-              .u002-mag {
-                transition: translate .9s var(--ux-spring);
-              }
-
-              .u002-btn {
-                position: relative;
-                display: flex;
-                align-items: center;
-                gap: 18px;
-                height: 76px;
-                padding: 0 10px 0 32px;
-                border: 0;
-                border-radius: 999px;
-                background: var(--bg);
-                color: var(--fg);
-                overflow: hidden;
-                isolation: isolate;
-                box-shadow:
-                  0 24px 40px -24px rgba(40, 24, 110, .6),
-                  0 0 0 1px color-mix(in srgb, var(--fg) 8%, transparent);
-                transition:
-                  transform .6s var(--ux-spring),
-                  box-shadow .6s var(--ux-ease);
-              }
-
-              .u002-btn:hover {
-                box-shadow:
-                  0 30px 52px -22px rgba(91, 72, 255, .7),
-                  0 0 0 1px transparent;
-              }
-
-              .u002-btn:active {
-                transform: scale(.96);
-              }
-
-              .u002-btn:focus-visible {
-                outline: 2px solid var(--ux-accent);
-                outline-offset: 5px;
-              }
-
-              .u002-fill {
-                position: absolute;
-                inset: 0;
-                z-index: -1;
-                background: var(--blob);
-                clip-path: circle(28px at calc(100% - 38px) 50%);
-                transition: clip-path .8s var(--ux-ease);
-              }
-
-              .u002-btn:hover .u002-fill,
-              .u002-btn:focus-visible .u002-fill {
-                clip-path: circle(160% at calc(100% - 38px) 50%);
-              }
-
-              .u002-txt {
-                position: relative;
-                overflow: hidden;
-                padding: 5px 0;
-                font-size: 19px;
-                font-weight: 700;
-                letter-spacing: -.03em;
-                white-space: nowrap;
-                transition:
-                  translate .7s var(--ux-spring),
-                  color .5s var(--ux-ease);
-              }
-
-              .u002-btn:hover .u002-txt {
-                color: #fff;
-              }
-
-              .u002-txt span {
-                display: block;
-                transition:
-                  transform .6s var(--ux-spring),
-                  opacity .35s var(--ux-ease);
-              }
-
-              .u002-txt span + span {
-                position: absolute;
-                left: 0;
-                top: 5px;
-                transform: translateY(130%);
-                opacity: 0;
-              }
-
-              .u002[data-state="go"] .u002-txt span:first-child {
-                transform: translateY(-130%);
-                opacity: 0;
-              }
-
-              .u002[data-state="go"] .u002-txt span + span {
-                transform: none;
-                opacity: 1;
-              }
-
-              .u002-orb {
-                position: relative;
-                width: 56px;
-                height: 56px;
-                border-radius: 50%;
-                display: grid;
-                place-items: center;
-                color: #fff;
-                overflow: hidden;
-                flex: none;
-                transition: translate .7s var(--ux-spring);
-              }
-
-              .u002-orb svg {
-                position: absolute;
-                width: 22px;
-                height: 22px;
-                fill: none;
-                stroke: currentColor;
-                stroke-width: 2.4;
-                stroke-linecap: round;
-                stroke-linejoin: round;
-              }
-
-              .u002-orb svg:last-child {
-                transform: translateX(-46px);
-              }
-
-              .u002[data-state="go"] .u002-orb svg:first-child {
-                animation: u002-out .55s var(--ux-ease) forwards;
-              }
-
-              .u002[data-state="go"] .u002-orb svg:last-child {
-                animation: u002-in .6s var(--ux-spring) .28s forwards;
-              }
-
-              @keyframes u002-out {
-                to {
-                  transform: translateX(46px);
-                }
-              }
-
-              @keyframes u002-in {
-                to {
-                  transform: none;
-                }
-              }
-
-              .u002-glow {
-                position: absolute;
-                left: 50%;
-                top: 50%;
-                width: 300px;
-                height: 110px;
-                margin: -40px 0 0 -150px;
-                border-radius: 50%;
-                background: var(--blob);
-                filter: blur(36px);
-                opacity: 0;
-                z-index: -1;
-                transition: opacity .7s var(--ux-ease);
-              }
-
-              .u002:hover .u002-glow {
-                opacity: .45;
-              }
-
-              .u002-live {
-                position: absolute;
-                width: 1px;
-                height: 1px;
-                overflow: hidden;
-                clip-path: inset(50%);
-                white-space: nowrap;
-              }
-            </style>
-
-            <div class="ux u002" data-state="idle">
-              <span class="u002-glow" aria-hidden="true"></span>
-
-              <div class="u002-mag">
-                <button class="u002-btn" type="button">
-                  <span class="u002-fill" aria-hidden="true"></span>
-
-                  <span class="u002-txt">
-                    <span>참가 신청하기</span>
-                    <span aria-hidden="true">신청 정보 입력</span>
-                  </span>
-
-                  <span class="u002-orb" aria-hidden="true">
-                    <svg viewBox="0 0 24 24">
-                      <path d="M5 12h13M13 6l6 6-6 6"/>
-                    </svg>
-                    <svg viewBox="0 0 24 24">
-                      <path d="M5 12h13M13 6l6 6-6 6"/>
-                    </svg>
-                  </span>
-                </button>
-              </div>
-
-              <span class="u002-live" aria-live="polite"></span>
-            </div>
-
-            <script>
-              (function () {
-                var root = document.currentScript.previousElementSibling;
-                var btn = root.querySelector('.u002-btn');
-                var mag = root.querySelector('.u002-mag');
-                var txt = root.querySelector('.u002-txt');
-                var orb = root.querySelector('.u002-orb');
-                var live = root.querySelector('.u002-live');
-                var rm = window.matchMedia(
-                  '(prefers-reduced-motion: reduce)'
-                ).matches;
-                var t = 0;
-
-                root.addEventListener('pointermove', function (e) {
-                  if (rm) return;
-
-                  var r = btn.getBoundingClientRect();
-                  var dx = e.clientX - (r.left + r.width / 2);
-                  var dy = e.clientY - (r.top + r.height / 2);
-                  var p = Math.max(0, 1 - Math.hypot(dx, dy) / 240);
-
-                  mag.style.translate =
-                    (dx * 0.12 * p).toFixed(1) + 'px ' +
-                    (dy * 0.22 * p).toFixed(1) + 'px';
-
-                  txt.style.translate =
-                    (dx * 0.05 * p).toFixed(1) + 'px ' +
-                    (dy * 0.08 * p).toFixed(1) + 'px';
-
-                  orb.style.translate =
-                    (dx * 0.1 * p).toFixed(1) + 'px ' +
-                    (dy * 0.14 * p).toFixed(1) + 'px';
-                });
-
-                root.addEventListener('pointerleave', function () {
-                  mag.style.translate =
-                    txt.style.translate =
-                    orb.style.translate = '0px 0px';
-                });
-
-                btn.addEventListener('click', function () {
-                  location.hash = 'register';
-
-                  clearTimeout(t);
-                  root.dataset.state = 'idle';
-                  void btn.offsetWidth;
-                  root.dataset.state = 'go';
-                  live.textContent = '신청 정보 입력';
-
-                  t = setTimeout(function () {
-                    if (root.isConnected) {
-                      root.dataset.state = 'idle';
-                      live.textContent = '';
-                    }
-                  }, rm ? 900 : 1900);
-                });
-              })();
-            </script>
-
-            <a class="text-link" href="#program">
-              프로그램 살펴보기 ↓
-            </a>
-          </div>
-
-          <p class="lunch-notice">
-            🍽️ 사전 신청자에 한해 점심을 무료로 제공합니다.
-          </p>
-
-          <p class="note">
-            당일 행사 후 (사)스마트교육학회 정기 총회가 예정되어 있으니 회원님들께서는 꼭 참석 부탁드립니다.
-          </p>
-
-          <p class="organizer">
-            주최
-            <strong data-content="hostName">(사)스마트교육학회</strong>
-          </p>
-
-          <p class="organizer co-organizers">
-            주관
-            <strong class="content-multiline" data-content="organizers">목원대 AI중심대학사업단 · AI융합교육학회 · (사)ICT플랫폼학회</strong>
-          </p>
-        </div>
-
-        <figure class="festival-poster">
-          <button
-            type="button"
-            id="poster-open"
-            aria-haspopup="dialog"
-            aria-controls="poster-dialog"
-            aria-label="행사 포스터 크게 보기"
-          >
-            <img
-              src="assets/festival-poster.gif"
-              alt="2026 동계 페스티벌 및 공동학술발표대회 포스터: 11월 21일 목원대학교 사범관 4층"
-              width="2500"
-              height="3133"
-              referrerpolicy="no-referrer"
-            >
-            <span class="poster-zoom">🔍 포스터 크게 보기</span>
-          </button>
-
-          <figcaption>
-            2026 동계 페스티벌 및 공동학술발표대회
-          </figcaption>
-
-          <p id="poster-error" class="note" hidden>
-            포스터를 불러오지 못했습니다.
-            <a
-              href="assets/festival-poster.gif"
-              target="_blank"
-              rel="noopener noreferrer"
-            >원본 이미지 열기 ↗</a>
-          </p>
-        </figure>
-      </section>
-
-      <section class="event-facts" aria-label="행사 기본 정보">
-        <div>
-          <span class="fact-icon">↗</span>
-          <p>
-            <small>WHEN · 일시</small>
-            <strong data-content="eventDate">2026. 11. 21. 토요일</strong>
-            <span data-content="eventTime">10:00–18:30 · 본 행사 17:50 종료</span>
-          </p>
-        </div>
-
-        <div>
-          <span class="fact-icon">⌖</span>
-          <p>
-            <small>WHERE · 장소</small>
-            <strong data-content="eventLocation">목원대학교 사범관 4층</strong>
-            <span>강연 · 실습 · 전시 · 학술 토론</span>
-          </p>
-        </div>
-
-        <div>
-          <span class="fact-icon">✧</span>
-          <p>
-            <small>TOGETHER · 주관</small>
-            <strong class="content-multiline" data-content="organizers">목원대 AI중심대학사업단 · AI융합교육학회 · (사)ICT플랫폼학회</strong>
-          </p>
-        </div>
-      </section>
-
-      <section class="discover">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">A DAY OF NEW POSSIBILITIES</p>
-            <h2>🌱 경험하고, 연결하고, 함께 성장하는 하루</h2>
-          </div>
-          <span class="muted">교실의 가능성을 넓히는 세 가지 만남</span>
-        </div>
-
-        <div class="feature-grid">
-          <article class="feature mint">
-            <span>01 / HANDS-ON</span>
-            <div class="feature-symbol">🤖</div>
-            <h3>직접 해보는 AI 실습</h3>
-            <p>
-              바이브 코딩부터 캔바 AI까지.<br>
-              수업과 교무 업무에 연결하는 실습.
-            </p>
-          </article>
-
-          <article class="feature lavender">
-            <span>02 / INSIGHT</span>
-            <div class="feature-symbol">🧭</div>
-            <h3>교사의 내일을 묻는 강연</h3>
-            <p>
-              AGI 시대, 교사의 역할과 나아갈 길.<br>
-              새로운 교육을 위한 질문과 통찰.
-            </p>
-          </article>
-
-          <article class="feature peach">
-            <span>03 / CONNECTION</span>
-            <div class="feature-symbol">💬</div>
-            <h3>현장과 연구가 만나는 대화</h3>
-            <p>
-              에듀테크 전시·체험과 공동 학술 토론.<br>
-              교사, 기업, 대학이 함께 나누는 경험.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      <section id="program">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">PROGRAM</p>
-            <h2>🗓️ 페스티벌 당일 일정</h2>
-          </div>
-        </div>
-
-        <div class="tabs" role="group" aria-label="프로그램 시간대">
-          <button
-            class="selected"
-            data-period="all"
-            aria-pressed="true"
-          >전체 일정</button>
-
-          <button
-            data-period="am"
-            aria-pressed="false"
-          >오전 프로그램</button>
-
-          <button
-            data-period="pm"
-            aria-pressed="false"
-          >오후 프로그램</button>
-        </div>
-
-        <div id="schedule"></div>
-
-        <p class="note">
-          ※ 프로그램 및 발표 장소는 운영 상황에 따라 변경될 수 있습니다.<br>
-          ※ 정기총회는 본 행사 종료 후 18:00–18:30에 진행됩니다.
-        </p>
-      </section>
-
-      <section class="closing">
-        <span class="eyebrow">SEE YOU IN NOVEMBER</span>
-        <h2>새로운 배움의 시작, 함께해요.</h2>
-        <p>참석자 이름과 소속을 바탕으로 수료증을 발급할 예정입니다.</p>
-        <a class="button dark" href="#register">참가 신청하기 ↗</a>
-      </section>
-    </div>
-
-    <!-- 참가 신청 -->
-    <section id="register" class="page hidden form-page">
-      <div class="form-intro">
-        <p class="eyebrow">REGISTRATION</p>
-        <h1>함께할 준비가<br>되셨나요?</h1>
-
-        <p>
-          배움의 다음 장에서 만나겠습니다.<br>
-          아래 정보를 정확하게 입력해 주세요.
-        </p>
-
-        <div class="side-note">
-          <strong data-content="eventDate">2026. 11. 21. (토)</strong>
-          <p>
-            <span data-content="eventTime">10:00–18:30 · 본 행사 17:50 종료</span><br>
-            <span data-content="eventLocation">목원대학교 사범관 4층</span>
-          </p>
-        </div>
-
-        <div class="side-note mint">
-          <strong>🍽️ 사전 신청자 점심 제공</strong>
-          <p>사전 신청자에 한해 점심을 무료로 제공합니다.</p>
-        </div>
-
-        <div class="side-note mint">
-          <strong>수료증에 그대로 담기는 정보</strong>
-          <p>
-            이름과 소속은 수료증 발급에 사용됩니다.
-            제출 전 표기를 꼭 확인해 주세요.
-          </p>
-          <small>발급 기준과 방법은 추후 안내 예정입니다.</small>
-        </div>
-      </div>
-
-      <form id="registration" class="form-card">
-        <div class="form-title">
-          <h2>참가자 정보</h2>
-          <span>* 필수 입력</span>
-        </div>
-
-        <div class="fields">
-          <label>
-            성명 *
-            <input
-              name="name"
-              autocomplete="name"
-              maxlength="40"
-              placeholder="성함을 입력해 주세요"
-              required
-            >
-          </label>
-
-          <label>
-            소속 *
-            <input
-              name="organization"
-              autocomplete="organization"
-              maxlength="100"
-              placeholder="학교 또는 기관명"
-              required
-            >
-          </label>
-
-          <label class="full">
-            이메일 *
-            <input
-              name="email"
-              type="email"
-              autocomplete="email"
-              maxlength="150"
-              placeholder="example@school.kr"
-              required
-            >
-            <small>행사 및 수료증 관련 안내에 사용됩니다.</small>
-          </label>
-
-          <label class="full">
-            연락처 *
-            <input
-              name="phone"
-              type="tel"
-              autocomplete="tel"
-              inputmode="numeric"
-              pattern="(02|0[0-9]{2})-[0-9]{3,4}-[0-9]{4}"
-              title="숫자만 입력하면 하이픈이 자동으로 붙습니다."
-              placeholder="010-0000-0000"
-              required
-            >
-          </label>
-        </div>
-
-        <hr>
-
-        <h3>🗓️ 참여할 실습을 선택해 주세요</h3>
-        <p class="note">오전과 오후에 각각 한 개의 트랙을 선택해 주세요.</p>
-
-        <fieldset class="form-group">
-          <legend>오전 트랙 · 10:30–12:30 *</legend>
-
-          <label class="choice">
-            <input
-              type="radio"
-              name="morningTrack"
-              value="[트랙 1] 초등 교수 학습  바이브 코딩 실습 (강사: 울산 화진초 석희철 / U402호)"
-              required
-            >
-            <span>
-              트랙 1 · 초등 교수 학습 바이브 코딩 실습 — 석희철 (울산 화진초) / U402호
-            </span>
-          </label>
-
-          <label class="choice">
-            <input
-              type="radio"
-              name="morningTrack"
-              value="[트랙 2] 캔바 AI를 활용한 실습 (강사:(주) 오늘배움 주방현 / U411호)"
-              required
-            >
-            <span>
-              트랙 2 · 캔바 AI를 활용한 실습 — 주방현 (㈜오늘배움) / U411호
-            </span>
-          </label>
-
-          <label class="choice">
-            <input
-              type="radio"
-              name="morningTrack"
-              value="[트랙 3] 대학생 글쓰기에서의 생성현 AI활용 및 인식비교연구 목원대 성창규외 3인 /(U 403호)"
-              required
-            >
-            <span>
-              트랙 3 · 대학생 글쓰기에서의 생성형 AI 활용 및 인식 비교 연구 — 성창규 외 3인 (목원대) / U403호
-            </span>
-          </label>
-        </fieldset>
-
-        <fieldset class="form-group">
-          <legend>오후 트랙 · 15:30–17:15 *</legend>
-
-          <label class="choice">
-            <input
-              type="radio"
-              name="afternoonTrack"
-              value="[트랙 1] 중등 교수학습 바이브 코딩 실습 (강사: 서울 신목중 김재현 / U402호)"
-              required
-            >
-            <span>
-              트랙 1 · 중등 교수학습 바이브 코딩 실습 — 김재현 (서울 신목중) / U402호
-            </span>
-          </label>
-
-          <label class="choice">
-            <input
-              type="radio"
-              name="afternoonTrack"
-              value="[트랙 2] AI 업무 개선방법 실습 (강사: 충남 신대초 김용욱 / U411호)"
-              required
-            >
-            <span>
-              트랙 2 · AI 업무 개선방법 실습 — 김용욱 (충남 신대초) / U411호
-            </span>
-          </label>
-
-          <label class="choice">
-            <input
-              type="radio"
-              name="afternoonTrack"
-              value="[트랙 3] AI를 활용하는 액션러닝 수업설계 목원대 이선희/(U 403호)"
-              required
-            >
-            <span>
-              트랙 3 · AI를 활용하는 액션러닝 수업설계 — 이선희 (목원대) / U403호
-            </span>
-          </label>
-        </fieldset>
-
-        <hr>
-
-        <h3>개인정보 수집·이용 동의</h3>
-
-        <div class="consent-box">
-          <p>
-            <b>수집 항목</b>
-            성명, 소속, 연락처, 이메일, 오전·오후 트랙, 동의 여부,
-            행사 인지 경로, 향후 희망 주제
-          </p>
-          <p>
-            <b>이용 목적</b>
-            참가 신청 관리, 행사 안내 및 수료증 발급
-          </p>
-          <p>
-            <b>보유 기간</b>
-            <span id="privacy-retention">접수 안내 확인 후 표시합니다.</span>
-          </p>
-          <p>
-            <b>처리 주체</b>
-            <span data-content="privacyController">운영자 확인 후 안내</span>
-          </p>
-          <p>
-            동의를 거부할 수 있으며, 필수 정보 수집·이용에 동의하지 않으면
-            온라인 신청이 제한됩니다.
-          </p>
-        </div>
-
-        <fieldset class="form-group">
-          <legend>개인정보 수집 및 이용 동의 *</legend>
-
-          <div class="consent-options">
-            <label class="choice">
-              <input
-                type="radio"
-                name="consent"
-                value="동의합니다."
-                required
-              >
-              <span>동의합니다.</span>
-            </label>
-
-            <label class="choice">
-              <input
-                type="radio"
-                name="consent"
-                value="동의하지 않습니다."
-                required
-              >
-              <span>동의하지 않습니다.</span>
-            </label>
-          </div>
-        </fieldset>
-
-        <fieldset class="form-group">
-          <legend>행사 현장 사진 및 동영상 촬영·활용 동의 *</legend>
-
-          <p class="note" id="media-usage">
-            촬영·활용 범위는 접수 안내 확인 후 표시합니다.
-          </p>
-
-          <div class="consent-options">
-            <label class="choice">
-              <input
-                type="radio"
-                name="photoConsent"
-                value="동의합니다."
-                required
-              >
-              <span>동의합니다.</span>
-            </label>
-
-            <label class="choice">
-              <input
-                type="radio"
-                name="photoConsent"
-                value="동의하지 않습니다."
-                required
-              >
-              <span>동의하지 않습니다.</span>
-            </label>
-          </div>
-        </fieldset>
-
-        <label class="written-answer">
-          본 행사를 알게 된 경로는 무엇인가요? *
-          <select name="discovery" required>
-            <option value="">선택해 주세요</option>
-            <option>소속 학교/기관 안내 공문</option>
-            <option>SNS(페이스북, 인스타그램 등)</option>
-            <option>에듀테크 커뮤니티</option>
-            <option>지인 추천</option>
-            <option>기타</option>
-          </select>
-        </label>
-
-        <label class="written-answer">
-          향후 개최될 학술대회나 교육 프로그램에서 다루었으면 하는 주제가 있다면 무엇인가요? *
-          <textarea
-            name="futureTopic"
-            required
-            maxlength="2000"
-            rows="4"
-            placeholder="관심 있는 주제를 자유롭게 적어 주세요. 없으면 ‘없음’으로 입력해 주세요."
-          ></textarea>
-        </label>
-
-        <label class="check">
-          <input type="checkbox" required name="certificate">
-          <span>[필수] 수료증에 사용할 이름과 소속을 확인했습니다.</span>
-        </label>
-
-        <div class="draft-note">
-          접수 가능 여부를 확인하고 있습니다.
-        </div>
-
-        <p id="registration-status" role="status"></p>
-
-        <button
-          class="button dark full-button"
-          type="submit"
-          disabled
-        >신청 내용 확인하기 ↗</button>
-      </form>
-    </section>
-
-    <!-- 문의 -->
-    <section id="contact" class="page hidden contact-page">
-      <p class="eyebrow">HELP &amp; CONTACT</p>
-      <h1>궁금한 점이 있으신가요?</h1>
-      <p class="intro">참가 전 자주 묻는 내용을 확인해 주세요.</p>
-
-      <div class="contact-grid">
-        <div class="faq-slot">
-          <!--
-            Lucian UX/UI Prompt #044
-            MIT License (c) 2026 Seokwoooo
-            https://lucianlabs.dev/uxui-prompt/#044
-
-            Element: 자주 묻는 질문 아코디언
-            ID: 044
-            Category: 메뉴·탭
-            Tags: accordion, faq, disclosure, expand, keyboard
-
-            What it does:
-            질문을 누르면 그 칸이 떠오르며 답변이 부드럽게 펼쳐지고,
-            더하기 기호는 한 획이 누우며 빼기로 바뀝니다.
-            한 번에 하나만 열리고 나머지는 차분히 접힙니다.
-
-            How to use it:
-            질문을 눌러 열고 닫아 보세요.
-            키보드는 위아래 방향키로 질문을 옮기고 Enter로 엽니다.
-
-            Footprint: fixed size, square
-            Needs:
-            tokens.css
-            (the --ux-* theme tokens and the .ux base).
-            Map the tokens to the project's theme variables.
-          -->
-
-          <style>
-            .u044 {
-              position: relative;
-              width: 350px;
-              height: 400px;
-              display: flex;
-              flex-direction: column;
-              gap: 8px;
-            }
-
-            .u044-it {
-              position: relative;
-              border-radius: 20px;
-              background: var(--ux-surface);
-              box-shadow: 0 0 0 1px var(--ux-line);
-              transition:
-                background-color .4s var(--ux-ease),
-                box-shadow .5s var(--ux-ease),
-                transform .5s var(--ux-spring);
-            }
-
-            .u044-it.open {
-              box-shadow:
-                0 0 0 1px var(--ux-line-2),
-                0 22px 40px -22px var(--ux-shadow-strong);
-              transform: translateY(-2px);
-            }
-
-            .u044-q {
-              position: relative;
-              display: flex;
-              align-items: center;
-              gap: 12px;
-              width: 100%;
-              min-height: 58px;
-              padding: 0 14px 0 16px;
-              border: 0;
-              border-radius: 20px;
-              background: none;
-              font-size: 14.5px;
-              font-weight: 680;
-              letter-spacing: -.02em;
-              color: var(--ux-ink);
-              text-align: left;
-            }
-
-            .u044-q:focus-visible {
-              outline: 2px solid var(--ux-accent);
-              outline-offset: 2px;
-            }
-
-            .u044-n {
-              font-size: 12px;
-              font-weight: 800;
-              color: var(--ux-ink-3);
-              font-variant-numeric: tabular-nums;
-              transition: color .3s;
-            }
-
-            .u044-it.open .u044-n {
-              color: var(--ux-accent);
-            }
-
-            .u044-t {
-              flex: 1;
-            }
-
-            .u044-pm {
-              position: relative;
-              width: 30px;
-              height: 30px;
-              flex: none;
-              border-radius: 50%;
-              background: var(--ux-surface-2);
-              box-shadow: none;
-              transition:
-                background-color .35s var(--ux-ease),
-                box-shadow .35s,
-                transform .45s var(--ux-spring);
-            }
-
-            .u044-q:hover .u044-pm {
-              transform: scale(1.1);
-            }
-
-            .u044-q:active .u044-pm {
-              transform: scale(.9);
-            }
-
-            .u044-pm::before,
-            .u044-pm::after {
-              content: "";
-              position: absolute;
-              left: 50%;
-              top: 50%;
-              width: 11px;
-              height: 2px;
-              margin: -1px 0 0 -5.5px;
-              border-radius: 2px;
-              background: var(--ux-ink);
-              transition:
-                transform .5s var(--ux-spring),
-                background-color .3s;
-            }
-
-            .u044-pm::after {
-              transform: rotate(90deg);
-            }
-
-            .u044-it.open .u044-pm {
-              background: var(--ux-ink);
-              box-shadow: none;
-            }
-
-            .u044-it.open .u044-pm::before,
-            .u044-it.open .u044-pm::after {
-              background: var(--ux-page);
-            }
-
-            .u044-it.open .u044-pm::after {
-              transform: rotate(180deg);
-            }
-
-            .u044-body {
-              display: grid;
-              grid-template-rows: 0fr;
-              transition: grid-template-rows .5s var(--ux-ease);
-            }
-
-            .u044-it.open .u044-body {
-              grid-template-rows: 1fr;
-            }
-
-            .u044-body > div {
-              overflow: hidden;
-              min-height: 0;
-            }
-
-            .u044-a {
-              padding: 0 18px 16px 42px;
-              opacity: 0;
-              transform: translateY(-8px);
-              transition:
-                opacity .25s var(--ux-ease),
-                transform .45s var(--ux-spring);
-            }
-
-            .u044-it.open .u044-a {
-              opacity: 1;
-              transform: none;
-              transition-delay: .12s;
-            }
-
-            .u044-a p {
-              margin: 0;
-              font-size: 13.5px;
-              line-height: 1.62;
-              color: var(--ux-ink-2);
-            }
-
-            .u044-a a {
-              display: inline-flex;
-              align-items: center;
-              gap: 4px;
-              margin-top: 10px;
-              font-size: 13px;
-              font-weight: 700;
-              color: var(--ux-accent);
-              text-decoration: none;
-            }
-
-            .u044-a a:focus-visible {
-              outline: 2px solid var(--ux-accent);
-              outline-offset: 2px;
-              border-radius: 4px;
-            }
-
-            .u044-a a i {
-              font-style: normal;
-              transition: transform .3s var(--ux-spring);
-            }
-
-            .u044-a a:hover i {
-              transform: translateX(3px);
-            }
-          </style>
-
-          <div class="ux u044">
-            <div class="u044-it open">
-              <button
-                class="u044-q"
-                type="button"
-                aria-expanded="true"
-              >
-                <span class="u044-n">01</span>
-                <span class="u044-t">
-                  행사는 언제, 어디에서 열리나요?
-                </span>
-                <span class="u044-pm" aria-hidden="true"></span>
-              </button>
-
-              <div class="u044-body" role="region">
-                <div>
-                  <div class="u044-a">
-                    <p>
-                      <span data-content="eventDate">2026. 11. 21. 토요일</span><br>
-                      <span data-content="eventTime">10:00–18:30 · 본 행사 17:50 종료</span><br>
-                      <span data-content="eventLocation">목원대학교 사범관 4층</span>에서 열립니다.
-                    </p>
-                    <a href="#program">
-                      프로그램 보기 <i aria-hidden="true">→</i>
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="u044-it">
-              <button
-                class="u044-q"
-                type="button"
-                aria-expanded="false"
-              >
-                <span class="u044-n">02</span>
-                <span class="u044-t">수료증은 어떻게 발급되나요?</span>
-                <span class="u044-pm" aria-hidden="true"></span>
-              </button>
-
-              <div class="u044-body" role="region">
-                <div>
-                  <div class="u044-a">
-                    <p>
-                      입력한 이름과 소속으로 발급할 예정입니다.
-                      출석 확인 기준과 발급 시점·방법은 추후 안내합니다.
-                    </p>
-                    <a href="#register">
-                      이름·소속 입력하기 <i aria-hidden="true">→</i>
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="u044-it">
-              <button
-                class="u044-q"
-                type="button"
-                aria-expanded="false"
-              >
-                <span class="u044-n">03</span>
-                <span class="u044-t">참가비와 마감일은 언제인가요?</span>
-                <span class="u044-pm" aria-hidden="true"></span>
-              </button>
-
-              <div class="u044-body" role="region">
-                <div>
-                  <div class="u044-a">
-                    <p>
-                      추진계획(안)에 명시되어 있지 않습니다.
-                      운영자 확인 후 안내합니다.
-                    </p>
-                    <a href="#home">
-                      행사 안내 보기 <i aria-hidden="true">→</i>
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="u044-it">
-              <button
-                class="u044-q"
-                type="button"
-                aria-expanded="false"
-              >
-                <span class="u044-n">04</span>
-                <span class="u044-t">실습 프로그램을 선택할 수 있나요?</span>
-                <span class="u044-pm" aria-hidden="true"></span>
-              </button>
-
-              <div class="u044-body" role="region">
-                <div>
-                  <div class="u044-a">
-                    <p>
-                      동시간대에 여러 실습이 진행됩니다.
-                      세션 선택 방식과 정원은 운영자 확인 후 안내합니다.
-                    </p>
-                    <a href="#program">
-                      실습 일정 보기 <i aria-hidden="true">→</i>
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <script>
-            (function () {
-              var root = document.currentScript.previousElementSibling;
-              var items = Array.prototype.slice.call(
-                root.querySelectorAll('.u044-it')
-              );
-
-              var qs = items.map(function (it) {
-                return it.querySelector('.u044-q');
-              });
-
-              var uid = 'u044-' + Math.random().toString(36).slice(2, 7);
-
-              items.forEach(function (it, i) {
-                var q = qs[i];
-                var body = it.querySelector('.u044-body');
-
-                q.id = uid + '-q' + i;
-                body.id = uid + '-a' + i;
-
-                q.setAttribute('aria-controls', body.id);
-                body.setAttribute('aria-labelledby', q.id);
-              });
-
-              function set(it, open) {
-                it.classList.toggle('open', open);
-
-                it.querySelector('.u044-q').setAttribute(
-                  'aria-expanded',
-                  String(open)
-                );
-
-                it.querySelector('.u044-a a').tabIndex = open ? 0 : -1;
-              }
-
-              items.forEach(function (it, i) {
-                set(it, it.classList.contains('open'));
-
-                qs[i].addEventListener('click', function () {
-                  var willOpen = !it.classList.contains('open');
-
-                  items.forEach(function (other) {
-                    if (other !== it) set(other, false);
-                  });
-
-                  set(it, willOpen);
-                });
-
-                qs[i].addEventListener('keydown', function (e) {
-                  var next =
-                    e.key === 'ArrowDown' ? i + 1 :
-                    e.key === 'ArrowUp' ? i - 1 :
-                    e.key === 'Home' ? 0 :
-                    e.key === 'End' ? qs.length - 1 :
-                    -2;
-
-                  if (next === -2) return;
-
-                  e.preventDefault();
-                  qs[(next + qs.length) % qs.length].focus();
-                });
-              });
-            })();
-          </script>
-        </div>
-
-        <aside class="contact-card">
-          <span class="feature-symbol">↗</span>
-          <h2>운영 사무국</h2>
-
-          <p data-content="hostName">(사)스마트교육학회</p>
-
-          <hr>
-
-          <p>문의 이메일</p>
-          <a
-            class="text-link"
-            data-contact-email
-            href="mailto:inlife2018@gmail.com"
-          >inlife2018@gmail.com</a>
-
-          <p>전화번호</p>
-          <div class="phone-contact">
-            <strong data-content="contactPhone">02-851-9392</strong>
-            <a
-              class="button dark compact"
-              data-contact-call
-              href="tel:028519392"
-            >전화</a>
-            <a
-              class="button compact"
-              data-contact-sms
-              href="sms:028519392"
-            >문자</a>
-          </div>
-        </aside>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <div>
-      <strong data-content="hostName">(사)스마트교육학회</strong>
-      <p data-content="siteTitle">
-        2026 동계 페스티벌 및 공동 학술 발표 대회
-      </p>
-    </div>
-
-    <div>
-      <span data-content="siteTitle">
-        2026 동계 페스티벌 및 공동학술발표대회
-      </span>
-      <button class="admin-link" id="admin-open">관리자 화면</button>
-    </div>
-  </footer>
-
-  <!-- 포스터 확대 -->
-  <dialog id="poster-dialog" aria-labelledby="poster-title">
-    <div class="poster-toolbar">
-      <h2 id="poster-title">행사 포스터</h2>
-      <button class="close" aria-label="포스터 닫기" autofocus>×</button>
-    </div>
-
-    <p class="note">
-      이미지를 스크롤하여 전체 일정을 확인하세요.
-    </p>
-
-    <img
-      src="assets/festival-poster.gif"
-      alt="2026 스마트교육 동계 페스티벌 전체 포스터"
-      width="2500"
-      height="3133"
-      referrerpolicy="no-referrer"
-    >
-
-    <a
-      href="assets/festival-poster.gif"
-      target="_blank"
-      rel="noopener noreferrer"
-      class="text-link"
-    >원본 이미지 열기 ↗</a>
-  </dialog>
-
-  <!-- 신청 내용 확인 -->
-  <dialog id="confirmation">
-    <button class="close" aria-label="닫기">×</button>
-
-    <p class="eyebrow">CHECK YOUR DETAILS</p>
-    <h2>신청 내용을 확인해 주세요</h2>
-
-    <dl id="review"></dl>
-
-    <div class="certificate-details">
-      <small>수료증 표기 확인</small>
-      <strong id="certificate-name"></strong>
-      <span id="certificate-org"></span>
-    </div>
-
-    <p class="note" id="registration-note">
-      신청 내용을 확인한 후 최종 접수 버튼을 눌러 주세요.
-    </p>
-
-    <label class="check">
-      <input type="checkbox" id="review-confirm">
-      <span>위 신청 정보와 선택한 트랙을 다시 확인했습니다.</span>
-    </label>
-
-    <div class="review-actions">
-      <button
-        type="button"
-        class="button"
-        id="registration-edit"
-      >수정하기</button>
-
-      <button
-        class="button dark"
-        id="registration-send"
-        disabled
-      >최종 접수하기</button>
-    </div>
-
-    <p id="complete-message" role="status"></p>
-  </dialog>
-
-  <!-- 관리자 -->
-  <dialog id="admin" aria-labelledby="admin-title">
-    <div class="admin-dialog-header">
-      <button class="close" aria-label="관리자 화면 닫기">×</button>
-      <p class="eyebrow">ADMIN</p>
-      <h2 id="admin-title">관리자 로그인</h2>
-    </div>
-
-    <div id="admin-login">
-      <p>관리자 비밀번호로 로그인해 주세요.</p>
-
-      <form id="admin-form">
-        <label>
-          관리자 비밀번호
-          <input
-            name="password"
-            type="password"
-            minlength="4"
-            required
-            autocomplete="current-password"
-            placeholder="비밀번호를 입력해 주세요"
-          >
-        </label>
-
-        <button class="button dark full-button" type="submit">
-          로그인
-        </button>
-      </form>
-    </div>
-
-    <p id="admin-status" role="status" aria-live="polite"></p>
-
-    <section id="admin-dashboard" hidden aria-label="행사 운영 관리">
-      <div class="admin-top">
-        <p class="note">
-          로그인 상태는 30분간 유지됩니다.
-          공용 기기에서는 이용 후 로그아웃해 주세요.
-        </p>
-
-        <button
-          class="button compact"
-          id="admin-logout"
-          type="button"
-        >로그아웃</button>
-      </div>
-
-      <div class="admin-metrics">
-        <article>
-          <small>접수 인원</small>
-          <strong id="admin-count">0</strong>
-        </article>
-
-        <article>
-          <small>출석 확인</small>
-          <strong id="admin-attendance">0</strong>
-        </article>
-
-        <article>
-          <small>접수 취소</small>
-          <strong id="admin-cancelled">—</strong>
-        </article>
-      </div>
-
-      <div class="tabs" role="group" aria-label="관리 메뉴">
-        <button
-          type="button"
-          data-admin-tab="registrations"
-          class="selected"
-          aria-pressed="true"
-        >접수 현황</button>
-
-        <button
-          type="button"
-          data-admin-tab="content"
-          aria-pressed="false"
-        >행사 정보 수정</button>
-      </div>
-
-      <section id="admin-registrations" aria-label="접수 현황 관리">
-        <form id="admin-search" class="admin-filters">
-          <label>
-            검색
-            <input
-              name="query"
-              placeholder="성명·소속·이메일·연락처"
-              maxlength="100"
-            >
-          </label>
-
-          <label>
-            접수 상태
-            <select name="status">
-              <option value="REGISTERED">접수 완료</option>
-              <option value="CANCELLED">취소</option>
-              <option value="ALL">전체</option>
-            </select>
-          </label>
-
-          <label>
-            출석
-            <select name="attendance">
-              <option value="ALL">전체</option>
-              <option value="ATTENDED">출석 확인</option>
-              <option value="NOT_CHECKED">미확인</option>
-            </select>
-          </label>
-
-          <button class="button dark compact" type="submit">
-            조회
-          </button>
-        </form>
-
-        <p id="admin-list-status" role="status"></p>
-        <div id="admin-list"></div>
-
-        <div class="admin-pagination">
-          <button
-            class="button compact"
-            id="admin-prev"
-            type="button"
-          >이전</button>
-
-          <span id="admin-page"></span>
-
-          <button
-            class="button compact"
-            id="admin-next"
-            type="button"
-          >다음</button>
-        </div>
-      </section>
-
-      <section id="admin-content" hidden aria-label="행사 정보 수정">
-        <form id="admin-content-form">
-          <div id="admin-content-fields" class="admin-content-grid"></div>
-
-          <div class="admin-save-actions">
-            <button
-              class="button compact"
-              id="admin-content-reload"
-              type="button"
-            >다시 불러오기</button>
-
-            <button class="button dark" type="submit">
-              변경 내용 저장
-            </button>
-          </div>
-
-          <p id="admin-content-status" role="status"></p>
-        </form>
-      </section>
-    </section>
-  </dialog>
-
-  <!-- 기존 참가 신청 관련 파일 -->
-  <script src="registration-config.js?v=2"></script>
-  <script src="registration-api.js?v=2"></script>
-  <script src="app.js?v=admin-1"></script>
-
-  <!-- 관리자 코드는 이 HTML 안에 포함되어 있습니다. -->
-  <script>
-    (() => {
-      'use strict';
-
-      const $ = selector => document.querySelector(selector);
-
-      const dialog = $('#admin');
-      const dashboard = $('#admin-dashboard');
-      const loginForm = $('#admin-form');
-
-      const SESSION_DURATION = 30 * 60 * 1000;
-
-      const fields = [
-        ['siteTitle', '행사명'],
-        ['heroTitle1', '메인 제목 첫 줄'],
-        ['heroTitle2', '메인 제목 둘째 줄'],
-        ['heroIntro', '행사 소개', 'textarea'],
-        ['eventDate', '행사 날짜'],
-        ['eventTime', '행사 시간'],
-        ['eventLocation', '행사 장소'],
-        ['hostName', '주최'],
-        ['organizers', '주관', 'textarea'],
-        ['contactEmail', '문의 이메일', 'email'],
-        ['contactPhone', '문의 전화번호', 'tel'],
-        ['privacyController', '개인정보 처리 주체'],
-        ['privacyRetention', '개인정보 보유 기간'],
-        ['mediaUsageScope', '사진·동영상 촬영 및 활용 범위', 'textarea'],
-        ['registrationEnabled', '참가 신청 접수', 'select']
-      ];
-
-      const required = new Set([
-        'siteTitle',
-        'heroTitle1',
-        'heroTitle2',
-        'eventDate',
-        'eventTime',
-        'eventLocation',
-        'hostName',
-        'organizers',
-        'contactEmail',
-        'contactPhone',
-        'privacyRetention'
-      ]);
-
-      let password = '';
-      let session = 0;
-      let timer;
-      let sessionExpiresAt = 0;
-
-      let page = 1;
-      let pages = 1;
-      let listRequest = 0;
-      let revision = null;
-      let tab = 'registrations';
-      let contentReady = false;
-
-      function message(text) {
-        $('#admin-status').textContent = text;
-      }
-
-      function element(tag, text, className) {
-        const node = document.createElement(tag);
-
-        if (text !== undefined) {
-          node.textContent = text;
-        }
-
-        if (className) {
-          node.className = className;
-        }
-
-        return node;
-      }
-
-      function actionLink(text, href) {
-        const link = element('a', text, 'button compact');
-        link.href = href;
-        return link;
-      }
-
-      function phoneNumber(value) {
-        return String(value || '').replace(/[^+0-9]/g, '');
-      }
-
-      // 로그인 상태 관리
-      function hasSession() {
-        if (!password) {
-          return false;
-        }
-
-        if (Date.now() >= sessionExpiresAt) {
-          logout(
-            '로그인 후 30분이 지나 로그아웃되었습니다. 다시 로그인해 주세요.'
-          );
-          return false;
-        }
-
-        return true;
-      }
-
-      function startSession(candidate) {
-        password = candidate;
-        sessionExpiresAt = Date.now() + SESSION_DURATION;
-
-        clearTimeout(timer);
-        timer = setTimeout(() => hasSession(), SESSION_DURATION);
-      }
-
-      function logout(text = '') {
-        session++;
-        password = '';
-        sessionExpiresAt = 0;
-        revision = null;
-        contentReady = false;
-
-        clearTimeout(timer);
-
-        loginForm.reset();
-        loginForm.querySelector('button').disabled = false;
-
-        $('#admin-login').hidden = false;
-        dashboard.hidden = true;
-
-        $('#admin-title').textContent = '관리자 로그인';
-        $('#admin-list').replaceChildren();
-
-        $('#admin-count').textContent = '0';
-        $('#admin-attendance').textContent = '0';
-        $('#admin-cancelled').textContent = '—';
-
-        message(text);
-      }
-
-      // 이메일·문자 기본 문구
-      function confirmationMessage(name) {
-        return `${name} 회원님, 스마트교육학회 동계 페스티벌 신청이 완료되었습니다.`;
-      }
-
-      function smsLink(number, body) {
-        const isIOS =
-          /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-          (
-            navigator.platform === 'MacIntel' &&
-            navigator.maxTouchPoints > 1
-          );
-
-        const separator = isIOS ? '&' : '?';
-
-        return `sms:${number}${separator}body=${encodeURIComponent(body)}`;
-      }
-
-      // 행사 정보 표시
-      function defaults() {
-        const values = {};
-
-        for (const [key] of fields) {
-          const node = document.querySelector(
-            `[data-content="${key}"]`
-          );
-
-          values[key] = node ? node.innerText : '';
-        }
-
-        values.contactEmail =
-          $('[data-contact-email]').textContent.trim();
-
-        values.privacyRetention =
-          $('#privacy-retention').textContent;
-
-        values.mediaUsageScope =
-          typeof registrationSettings !== 'undefined' &&
-          registrationSettings
-            ? registrationSettings.mediaUsageScope || ''
-            : '';
-
-        values.registrationEnabled =
-          typeof registrationSettings !== 'undefined' &&
-          registrationSettings?.registrationEnabled
-            ? 'TRUE'
-            : 'FALSE';
-
-        return values;
-      }
-
-      function applyContent(content) {
-        if (!content || typeof content !== 'object') {
-          return;
-        }
-
-        for (const [key] of fields) {
-          if (typeof content[key] !== 'string') {
-            continue;
-          }
-
-          // 저장된 기관명에 줄바꿈이 있어도 한 줄로 연결합니다.
-          const value = key === 'organizers'
-            ? content[key].replace(/\s*[\r\n]+\s*/g, ' · ')
-            : content[key];
-
-          document
-            .querySelectorAll(`[data-content="${key}"]`)
-            .forEach(node => {
-              node.textContent = value;
-            });
-        }
-
-        if (
-          typeof content.siteTitle === 'string' &&
-          content.siteTitle.trim()
-        ) {
-          document.title = content.siteTitle;
-        }
-
-        if (
-          /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(content.contactEmail || '')
-        ) {
-          document
-            .querySelectorAll('[data-contact-email]')
-            .forEach(node => {
-              node.textContent = content.contactEmail;
-              node.href = 'mailto:' + content.contactEmail;
-            });
-        }
-
-        if (
-          /^\+?[0-9() -]{8,25}$/.test(content.contactPhone || '')
-        ) {
-          const phone = phoneNumber(content.contactPhone);
-
-          document
-            .querySelectorAll('[data-contact-call]')
-            .forEach(node => {
-              node.href = 'tel:' + phone;
-            });
-
-          document
-            .querySelectorAll('[data-contact-sms]')
-            .forEach(node => {
-              node.href = 'sms:' + phone;
-            });
-        }
-      }
-
-      // API 요청
-      async function post(action, data = {}) {
-        return window.RegistrationAPI.request({
-          method: 'POST',
-          body: new URLSearchParams({
-            payload: JSON.stringify({
-              action,
-              ...data
-            })
-          })
-        });
-      }
-
-      async function authenticated(action, data = {}) {
-        if (!hasSession()) {
-          throw new Error('다시 로그인해 주세요.');
-        }
-
-        const current = session;
-
-        try {
-          const result = await post(action, {
-            ...data,
-            password
-          });
-
-          if (!hasSession() || current !== session) {
-            throw new Error('로그아웃되었습니다.');
-          }
-
-          return result;
-        } catch (error) {
-          if (
-            current === session &&
-            /비밀번호|로그인 시도/.test(error.message)
-          ) {
-            logout(error.message);
-          }
-
-          throw error;
-        }
-      }
-
-      function unsupported(error) {
-        return /지원하지 않는 요청/.test(error.message)
-          ? '로그인은 완료됐습니다. 목록 조회와 정보 수정을 사용하려면 관리자 서버 업데이트가 필요합니다.'
-          : error.message;
-      }
-
-      function summary(data) {
-        $('#admin-count').textContent =
-          String(data.count ?? 0);
-
-        $('#admin-attendance').textContent =
-          String(data.attendanceCount ?? 0);
-
-        $('#admin-cancelled').textContent =
-          String(data.cancelledCount ?? '—');
-      }
-
-      // 신청자 목록 조회
-      async function loadList() {
-        if (!hasSession()) {
-          return;
-        }
-
-        const current = session;
-        const request = ++listRequest;
-
-        $('#admin-list-status').textContent =
-          '접수 현황을 불러오는 중입니다.';
-
-        $('#admin-list').replaceChildren();
-
-        const search = new FormData($('#admin-search'));
-
-        try {
-          const result = await authenticated('adminList', {
-            query: search.get('query'),
-            status: search.get('status'),
-            attendance: search.get('attendance'),
-            page
-          });
-
-          if (session !== current || request !== listRequest) {
-            return;
-          }
-
-          if (!Array.isArray(result.registrations)) {
-            throw new Error('접수 현황 응답을 확인하지 못했습니다.');
-          }
-
-          page = result.page;
-          pages = result.pages;
-
-          summary(result.summary || {});
-
-          $('#admin-list-status').textContent =
-            `조회 결과 ${result.total}명`;
-
-          $('#admin-page').textContent = `${page} / ${pages}`;
-
-          $('#admin-prev').disabled = page <= 1;
-          $('#admin-next').disabled = page >= pages;
-
-          if (!result.registrations.length) {
-            $('#admin-list').append(
-              element('p', '조회된 신청자가 없습니다.', 'note')
-            );
-          }
-
-          result.registrations.forEach(renderRegistration);
-        } catch (error) {
-          if (session !== current || request !== listRequest) {
-            return;
-          }
-
-          $('#admin-list-status').textContent = unsupported(error);
-          $('#admin-page').textContent = '';
-
-          $('#admin-prev').disabled = true;
-          $('#admin-next').disabled = true;
-        }
-      }
-
-      // 신청자 한 줄 표시 및 세부 내용
-      function renderRegistration(row) {
-        const card = element(
-          'article',
-          undefined,
-          'admin-person'
-        );
-
-        const details = element('details');
-
-        const heading = element(
-          'summary',
-          undefined,
-          'admin-person-row'
-        );
-
-        heading.setAttribute(
-          'aria-label',
-          `${row.name} 신청 내용 열기 또는 닫기`
-        );
-
-        const name = element(
-          'span',
-          row.name,
-          'admin-person-name'
-        );
-
-        const organization = element(
-          'span',
-          row.organization,
-          'admin-person-organization'
-        );
-
-        name.title = row.name;
-        organization.title = row.organization;
-
-        heading.append(name, organization);
-
-        const body = confirmationMessage(row.name);
-
-        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
-          const mail = element(
-            'a',
-            row.email,
-            'admin-person-email'
-          );
-
-          const subject =
-            '스마트교육학회 동계 페스티벌 신청 완료 안내';
-
-          mail.href =
-            `mailto:${row.email}` +
-            `?subject=${encodeURIComponent(subject)}` +
-            `&body=${encodeURIComponent(body)}`;
-
-          mail.title = `${row.email}로 메일 보내기`;
-
-          heading.append(mail);
-        } else {
-          heading.append(
-            element('span', row.email, 'admin-person-email')
-          );
-        }
-
-        const contacts = element(
-          'span',
-          undefined,
-          'admin-person-phone'
-        );
-
-        contacts.append(element('span', row.phone));
-
-        const number = phoneNumber(row.phone);
-
-        if (/^\+?\d{8,15}$/.test(number)) {
-          contacts.append(
-            actionLink('전화걸기', 'tel:' + number),
-            actionLink('메시지 보내기', smsLink(number, body))
-          );
-        }
-
-        heading.append(contacts);
-
-        heading.querySelectorAll('a').forEach(link => {
-          link.addEventListener('click', event => {
-            event.stopPropagation();
-          });
-        });
-
-        const list = element('dl');
-
-        const detailFields = [
-          ['접수번호', row.id],
-          ['접수 시각', row.createdAt],
-          [
-            '접수 상태',
-            row.status === 'CANCELLED' ? '취소' : '접수 완료'
-          ],
-          [
-            '출석 상태',
-            row.attendance === 'ATTENDED'
-              ? '출석 확인'
-              : '출석 미확인'
-          ],
-          ['오전 트랙', row.morningTrack],
-          ['오후 트랙', row.afternoonTrack],
-          ['촬영 활용', row.mediaConsent ? '동의' : '비동의'],
-          ['인지 경로', row.discoverySource],
-          ['희망 주제', row.futureTopics]
-        ];
-
-        for (const [label, value] of detailFields) {
-          list.append(
-            element('dt', label),
-            element('dd', value)
-          );
-        }
-
-        const actions = element(
-          'div',
-          undefined,
-          'admin-person-actions'
-        );
-
-        const attendance = element(
-          'button',
-          row.attendance === 'ATTENDED'
-            ? '출석 확인 취소'
-            : '출석 확인',
-          'button compact'
-        );
-
-        attendance.type = 'button';
-        attendance.disabled = row.status === 'CANCELLED';
-
-        attendance.addEventListener('click', () => {
-          updateRegistration(
-            row,
-            {
-              attendance:
-                row.attendance === 'ATTENDED'
-                  ? 'NOT_CHECKED'
-                  : 'ATTENDED'
-            },
-            card
-          );
-        });
-
-        const status = element(
-          'button',
-          row.status === 'CANCELLED' ? '접수 복원' : '접수 취소',
-          'button compact'
-        );
-
-        status.type = 'button';
-
-        status.addEventListener('click', () => {
-          const verb =
-            row.status === 'CANCELLED' ? '복원' : '취소';
-
-          if (
-            window.confirm(
-              `${row.name} 님의 접수를 ${verb}하시겠습니까?`
-            )
-          ) {
-            updateRegistration(
-              row,
-              {
-                status:
-                  row.status === 'CANCELLED'
-                    ? 'REGISTERED'
-                    : 'CANCELLED'
-              },
-              card
-            );
-          }
-        });
-
-        actions.append(attendance, status);
-        details.append(heading, list, actions);
-        card.append(details);
-
-        $('#admin-list').append(card);
-      }
-
-      async function updateRegistration(row, updates, card) {
-        const current = session;
-
-        card.querySelectorAll('button').forEach(button => {
-          button.disabled = true;
-        });
-
-        try {
-          await authenticated('adminUpdateRegistration', {
-            registrationId: row.id,
-            updates
-          });
-
-          if (current === session) {
-            message('접수 정보를 변경했습니다.');
-            await loadList();
-          }
-        } catch (error) {
-          if (current === session) {
-            message(error.message);
-
-            card.querySelectorAll('button').forEach(button => {
-              button.disabled = false;
-            });
-          }
-        }
-      }
-
-      // 행사 정보 수정
-      function buildContentForm(content) {
-        const container = $('#admin-content-fields');
-        container.replaceChildren();
-
-        const values = {
-          ...defaults(),
-          ...content
-        };
-
-        for (const [key, label, type] of fields) {
-          const wrapper = element('label', label);
-
-          if (type === 'textarea') {
-            wrapper.className = 'full';
-          }
-
-          const tag =
-            type === 'textarea'
-              ? 'textarea'
-              : type === 'select'
-                ? 'select'
-                : 'input';
-
-          const input = element(tag);
-          input.name = key;
-
-          if (type === 'select') {
-            const options = [
-              ['TRUE', '접수 중'],
-              ['FALSE', '접수 닫기']
-            ];
-
-            for (const [value, text] of options) {
-              const option = element('option', text);
-              option.value = value;
-              input.append(option);
-            }
-          } else if (type === 'textarea') {
-            input.rows = 3;
-            input.maxLength = 2000;
-          } else {
-            input.type = type || 'text';
-            input.maxLength = 500;
-          }
-
-          input.required = required.has(key);
-          input.value = values[key] || '';
-
-          wrapper.append(input);
-          container.append(wrapper);
-        }
-      }
-
-      async function loadContent() {
-        if (!hasSession()) {
-          return;
-        }
-
-        const current = session;
-        contentReady = false;
-
-        $('#admin-content-form [type=submit]').disabled = true;
-        $('#admin-content-status').textContent =
-          '행사 정보를 불러오는 중입니다.';
-
-        try {
-          const result = await authenticated('adminGetContent');
-
-          if (current !== session) {
-            return;
-          }
-
-          if (
-            !result.content ||
-            typeof result.revision !== 'string'
-          ) {
-            throw new Error('행사 정보를 확인하지 못했습니다.');
-          }
-
-          revision = result.revision;
-          contentReady = true;
-
-          buildContentForm(result.content);
-
-          $('#admin-content-status').textContent = '';
-          $('#admin-content-form [type=submit]').disabled = false;
-        } catch (error) {
-          if (current === session) {
-            $('#admin-content-status').textContent =
-              unsupported(error);
-          }
-        }
-      }
-
-      async function selectTab(value) {
-        tab = value;
-
-        $('#admin-registrations').hidden =
-          tab !== 'registrations';
-
-        $('#admin-content').hidden =
-          tab !== 'content';
-
-        document
-          .querySelectorAll('[data-admin-tab]')
-          .forEach(button => {
-            const active = button.dataset.adminTab === tab;
-
-            button.classList.toggle('selected', active);
-            button.setAttribute('aria-pressed', String(active));
-          });
-
-        if (tab === 'content') {
-          await loadContent();
-        } else {
-          await loadList();
-        }
-      }
-
-      // 관리자 창 열기·닫기
-      $('#admin-open').addEventListener('click', () => {
-        const loggedIn = hasSession();
-
-        dialog.showModal();
-
-        if (loggedIn) {
-          $('#admin-logout').focus();
-        } else {
-          loginForm.elements.password.focus();
-        }
-      });
-
-      dialog.addEventListener('close', () => {
-        if (!password) {
-          logout();
-        } else {
-          hasSession();
-        }
-      });
-
-      document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) {
-          hasSession();
-        }
-      });
-
-      $('#admin-logout').addEventListener('click', () => {
-        logout('로그아웃되었습니다.');
-      });
-
-      // 로그인
-      loginForm.addEventListener('submit', async event => {
-        event.preventDefault();
-
-        const button = loginForm.querySelector('button');
-
-        if (button.disabled || !loginForm.reportValidity()) {
-          return;
-        }
-
-        const current = ++session;
-        const candidate = loginForm.elements.password.value;
-
-        button.disabled = true;
-        message('로그인 확인 중입니다.');
-
-        try {
-          const result = await post('adminSummary', {
-            password: candidate
-          });
-
-          if (current !== session) {
-            return;
-          }
-
-          if (
-            !Number.isInteger(result.count) ||
-            !Number.isInteger(result.attendanceCount)
-          ) {
-            throw new Error('관리자 응답을 확인하지 못했습니다.');
-          }
-
-          startSession(candidate);
-          loginForm.reset();
-
-          $('#admin-login').hidden = true;
-          dashboard.hidden = false;
-          $('#admin-title').textContent = '행사 운영 관리';
-
-          message(
-            '로그인되었습니다. 로그인 상태는 30분간 유지됩니다.'
-          );
-
-          summary(result);
-          await selectTab('registrations');
-        } catch (error) {
-          if (current === session) {
-            message(error.message);
-            loginForm.reset();
-          }
-        } finally {
-          if (current === session) {
-            button.disabled = false;
-          }
-        }
-      });
-
-      // 탭·검색·페이지 이동
-      document
-        .querySelectorAll('[data-admin-tab]')
-        .forEach(button => {
-          button.addEventListener('click', () => {
-            selectTab(button.dataset.adminTab);
-          });
-        });
-
-      $('#admin-search').addEventListener('submit', event => {
-        event.preventDefault();
-        page = 1;
-        loadList();
-      });
-
-      $('#admin-prev').addEventListener('click', () => {
-        if (page > 1) {
-          page--;
-          loadList();
-        }
-      });
-
-      $('#admin-next').addEventListener('click', () => {
-        if (page < pages) {
-          page++;
-          loadList();
-        }
-      });
-
-      $('#admin-content-reload').addEventListener('click', () => {
-        if (
-          !contentReady ||
-          window.confirm(
-            '저장하지 않은 변경 내용을 버리고 다시 불러오시겠습니까?'
-          )
-        ) {
-          loadContent();
-        }
-      });
-
-      // 행사 정보 저장
-      $('#admin-content-form').addEventListener(
-        'submit',
-        async event => {
-          event.preventDefault();
-
-          const form = event.currentTarget;
-
-          if (!contentReady || !form.reportValidity()) {
-            return;
-          }
-
-          const current = session;
-          const button = form.querySelector('[type=submit]');
-          const content = Object.fromEntries(new FormData(form));
-
-          button.disabled = true;
-          $('#admin-content-status').textContent = '저장 중입니다.';
-
-          try {
-            const result = await authenticated(
-              'adminSaveContent',
-              {
-                content,
-                revision
-              }
-            );
-
-            if (current !== session) {
-              return;
-            }
-
-            if (
-              !result.content ||
-              typeof result.revision !== 'string'
-            ) {
-              throw new Error(
-                '저장 결과를 확인하지 못했습니다. 다시 불러온 뒤 확인해 주세요.'
-              );
-            }
-
-            revision = result.revision;
-            applyContent(result.content);
-
-            $('#admin-content-status').textContent =
-              '저장했습니다. 사이트에 변경 내용을 반영했습니다.';
-
-            if (typeof loadRegistrationSettings === 'function') {
-              await loadRegistrationSettings();
-            }
-          } catch (error) {
-            if (current === session) {
-              $('#admin-content-status').textContent =
-                error.message;
-            }
-          } finally {
-            if (current === session) {
-              button.disabled = false;
-            }
-          }
-        }
+    return true;
+  }
+
+  function startSession(candidate) {
+    password = candidate;
+    sessionExpiresAt = Date.now() + SESSION_DURATION;
+
+    clearTimeout(timer);
+    timer = setTimeout(() => hasSession(), SESSION_DURATION);
+  }
+
+  function logout(text = '') {
+    session++;
+    password = '';
+    sessionExpiresAt = 0;
+    revision = null;
+    contentReady = false;
+
+    clearTimeout(timer);
+
+    loginForm.reset();
+    loginForm.querySelector('button').disabled = false;
+
+    $('#admin-login').hidden = false;
+    dashboard.hidden = true;
+
+    $('#admin-title').textContent = '관리자 로그인';
+    $('#admin-list').replaceChildren();
+
+    $('#admin-count').textContent = '0';
+    $('#admin-attendance').textContent = '0';
+    $('#admin-cancelled').textContent = '—';
+
+    message(text);
+  }
+
+  // 이메일·문자 기본 문구
+  function confirmationMessage(name) {
+    return `${name} 회원님, 스마트교육학회 동계 페스티벌 신청이 완료되었습니다.`;
+  }
+
+  function smsLink(number, body) {
+    const isIOS =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (
+        navigator.platform === 'MacIntel' &&
+        navigator.maxTouchPoints > 1
       );
 
-      // 공개 행사 정보 반영
-      if (window.RegistrationAPI.endpoint()) {
-        post('getPublicContent')
-          .then(result => applyContent(result.content))
-          .catch(() => {});
+    const separator = isIOS ? '&' : '?';
+
+    return `sms:${number}${separator}body=${encodeURIComponent(body)}`;
+  }
+
+  // 행사 정보 표시
+  function defaults() {
+    const values = {};
+
+    for (const [key] of fields) {
+      const node = document.querySelector(
+        `[data-content="${key}"]`
+      );
+
+      values[key] = node ? node.innerText : '';
+    }
+
+    values.contactEmail =
+      $('[data-contact-email]').textContent.trim();
+
+    values.privacyRetention =
+      $('#privacy-retention').textContent;
+
+    values.mediaUsageScope =
+      typeof registrationSettings !== 'undefined' &&
+      registrationSettings
+        ? registrationSettings.mediaUsageScope || ''
+        : '';
+
+    values.registrationEnabled =
+      typeof registrationSettings !== 'undefined' &&
+      registrationSettings?.registrationEnabled
+        ? 'TRUE'
+        : 'FALSE';
+
+    return values;
+  }
+
+  function applyContent(content) {
+    if (!content || typeof content !== 'object') {
+      return;
+    }
+
+    for (const [key] of fields) {
+      if (typeof content[key] !== 'string') {
+        continue;
       }
-    })();
-  </script>
-</body>
-</html>
+
+      // 저장된 기관명에 줄바꿈이 있어도 한 줄로 연결합니다.
+      const value = key === 'organizers'
+        ? content[key].replace(/\s*[\r\n]+\s*/g, ' · ')
+        : content[key];
+
+      document
+        .querySelectorAll(`[data-content="${key}"]`)
+        .forEach(node => {
+          node.textContent = value;
+        });
+    }
+
+    if (
+      typeof content.siteTitle === 'string' &&
+      content.siteTitle.trim()
+    ) {
+      document.title = content.siteTitle;
+    }
+
+    if (
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(content.contactEmail || '')
+    ) {
+      document
+        .querySelectorAll('[data-contact-email]')
+        .forEach(node => {
+          node.textContent = content.contactEmail;
+          node.href = 'mailto:' + content.contactEmail;
+        });
+    }
+
+    if (
+      /^\+?[0-9() -]{8,25}$/.test(content.contactPhone || '')
+    ) {
+      const phone = phoneNumber(content.contactPhone);
+
+      document
+        .querySelectorAll('[data-contact-call]')
+        .forEach(node => {
+          node.href = 'tel:' + phone;
+        });
+
+      document
+        .querySelectorAll('[data-contact-sms]')
+        .forEach(node => {
+          node.href = 'sms:' + phone;
+        });
+    }
+  }
+
+  // API 요청
+  async function post(action, data = {}) {
+    return window.RegistrationAPI.request({
+      method: 'POST',
+      body: new URLSearchParams({
+        payload: JSON.stringify({
+          action,
+          ...data
+        })
+      })
+    });
+  }
+
+  async function authenticated(action, data = {}) {
+    if (!hasSession()) {
+      throw new Error('다시 로그인해 주세요.');
+    }
+
+    const current = session;
+
+    try {
+      const result = await post(action, {
+        ...data,
+        password
+      });
+
+      if (!hasSession() || current !== session) {
+        throw new Error('로그아웃되었습니다.');
+      }
+
+      return result;
+    } catch (error) {
+      if (
+        current === session &&
+        /비밀번호|로그인 시도/.test(error.message)
+      ) {
+        logout(error.message);
+      }
+
+      throw error;
+    }
+  }
+
+  function unsupported(error) {
+    return /지원하지 않는 요청/.test(error.message)
+      ? '로그인은 완료됐습니다. 목록 조회와 정보 수정을 사용하려면 관리자 서버 업데이트가 필요합니다.'
+      : error.message;
+  }
+
+  function summary(data) {
+    $('#admin-count').textContent =
+      String(data.count ?? 0);
+
+    $('#admin-attendance').textContent =
+      String(data.attendanceCount ?? 0);
+
+    $('#admin-cancelled').textContent =
+      String(data.cancelledCount ?? '—');
+  }
+
+  // 신청자 목록 조회
+  async function loadList() {
+    if (!hasSession()) {
+      return;
+    }
+
+    const current = session;
+    const request = ++listRequest;
+
+    $('#admin-list-status').textContent =
+      '접수 현황을 불러오는 중입니다.';
+
+    $('#admin-list').replaceChildren();
+
+    const search = new FormData($('#admin-search'));
+
+    try {
+      const result = await authenticated('adminList', {
+        query: search.get('query'),
+        status: search.get('status'),
+        attendance: search.get('attendance'),
+        page
+      });
+
+      if (session !== current || request !== listRequest) {
+        return;
+      }
+
+      if (!Array.isArray(result.registrations)) {
+        throw new Error('접수 현황 응답을 확인하지 못했습니다.');
+      }
+
+      page = result.page;
+      pages = result.pages;
+
+      summary(result.summary || {});
+
+      $('#admin-list-status').textContent =
+        `조회 결과 ${result.total}명`;
+
+      $('#admin-page').textContent = `${page} / ${pages}`;
+
+      $('#admin-prev').disabled = page <= 1;
+      $('#admin-next').disabled = page >= pages;
+
+      if (!result.registrations.length) {
+        $('#admin-list').append(
+          element('p', '조회된 신청자가 없습니다.', 'note')
+        );
+      }
+
+      result.registrations.forEach(renderRegistration);
+    } catch (error) {
+      if (session !== current || request !== listRequest) {
+        return;
+      }
+
+      $('#admin-list-status').textContent = unsupported(error);
+      $('#admin-page').textContent = '';
+
+      $('#admin-prev').disabled = true;
+      $('#admin-next').disabled = true;
+    }
+  }
+
+  // 신청자 한 줄 표시 및 세부 내용
+  function renderRegistration(row) {
+    const card = element(
+      'article',
+      undefined,
+      'admin-person'
+    );
+
+    const details = element('details');
+
+    const heading = element(
+      'summary',
+      undefined,
+      'admin-person-row'
+    );
+
+    heading.setAttribute(
+      'aria-label',
+      `${row.name} 신청 내용 열기 또는 닫기`
+    );
+
+    const name = element(
+      'span',
+      row.name,
+      'admin-person-name'
+    );
+
+    const organization = element(
+      'span',
+      row.organization,
+      'admin-person-organization'
+    );
+
+    name.title = row.name;
+    organization.title = row.organization;
+
+    heading.append(name, organization);
+
+    const body = confirmationMessage(row.name);
+
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
+      const mail = element(
+        'a',
+        row.email,
+        'admin-person-email'
+      );
+
+      const subject =
+        '스마트교육학회 동계 페스티벌 신청 완료 안내';
+
+      mail.href =
+        `mailto:${row.email}` +
+        `?subject=${encodeURIComponent(subject)}` +
+        `&body=${encodeURIComponent(body)}`;
+
+      mail.title = `${row.email}로 메일 보내기`;
+
+      heading.append(mail);
+    } else {
+      heading.append(
+        element('span', row.email, 'admin-person-email')
+      );
+    }
+
+    const contacts = element(
+      'span',
+      undefined,
+      'admin-person-phone'
+    );
+
+    contacts.append(element('span', row.phone));
+
+    const number = phoneNumber(row.phone);
+
+    if (/^\+?\d{8,15}$/.test(number)) {
+      contacts.append(
+        actionLink('전화걸기', 'tel:' + number),
+        actionLink('메시지 보내기', smsLink(number, body))
+      );
+    }
+
+    heading.append(contacts);
+
+    heading.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', event => {
+        event.stopPropagation();
+      });
+    });
+
+    const list = element('dl');
+
+    const detailFields = [
+      ['접수번호', row.id],
+      ['접수 시각', row.createdAt],
+      [
+        '접수 상태',
+        row.status === 'CANCELLED' ? '취소' : '접수 완료'
+      ],
+      [
+        '출석 상태',
+        row.attendance === 'ATTENDED'
+          ? '출석 확인'
+          : '출석 미확인'
+      ],
+      ['오전 트랙', row.morningTrack],
+      ['오후 트랙', row.afternoonTrack],
+      ['촬영 활용', row.mediaConsent ? '동의' : '비동의'],
+      ['인지 경로', row.discoverySource],
+      ['희망 주제', row.futureTopics]
+    ];
+
+    for (const [label, value] of detailFields) {
+      list.append(
+        element('dt', label),
+        element('dd', value)
+      );
+    }
+
+    const actions = element(
+      'div',
+      undefined,
+      'admin-person-actions'
+    );
+
+    const attendance = element(
+      'button',
+      row.attendance === 'ATTENDED'
+        ? '출석 확인 취소'
+        : '출석 확인',
+      'button compact'
+    );
+
+    attendance.type = 'button';
+    attendance.disabled = row.status === 'CANCELLED';
+
+    attendance.addEventListener('click', () => {
+      updateRegistration(
+        row,
+        {
+          attendance:
+            row.attendance === 'ATTENDED'
+              ? 'NOT_CHECKED'
+              : 'ATTENDED'
+        },
+        card
+      );
+    });
+
+    const status = element(
+      'button',
+      row.status === 'CANCELLED' ? '접수 복원' : '접수 취소',
+      'button compact'
+    );
+
+    status.type = 'button';
+
+    status.addEventListener('click', () => {
+      const verb =
+        row.status === 'CANCELLED' ? '복원' : '취소';
+
+      if (
+        window.confirm(
+          `${row.name} 님의 접수를 ${verb}하시겠습니까?`
+        )
+      ) {
+        updateRegistration(
+          row,
+          {
+            status:
+              row.status === 'CANCELLED'
+                ? 'REGISTERED'
+                : 'CANCELLED'
+          },
+          card
+        );
+      }
+    });
+
+    actions.append(attendance, status);
+    details.append(heading, list, actions);
+    card.append(details);
+
+    $('#admin-list').append(card);
+  }
+
+  async function updateRegistration(row, updates, card) {
+    const current = session;
+
+    card.querySelectorAll('button').forEach(button => {
+      button.disabled = true;
+    });
+
+    try {
+      await authenticated('adminUpdateRegistration', {
+        registrationId: row.id,
+        updates
+      });
+
+      if (current === session) {
+        message('접수 정보를 변경했습니다.');
+        await loadList();
+      }
+    } catch (error) {
+      if (current === session) {
+        message(error.message);
+
+        card.querySelectorAll('button').forEach(button => {
+          button.disabled = false;
+        });
+      }
+    }
+  }
+
+  // 행사 정보 수정
+  function buildContentForm(content) {
+    const container = $('#admin-content-fields');
+    container.replaceChildren();
+
+    const values = {
+      ...defaults(),
+      ...content
+    };
+
+    for (const [key, label, type] of fields) {
+      const wrapper = element('label', label);
+
+      if (type === 'textarea') {
+        wrapper.className = 'full';
+      }
+
+      const tag =
+        type === 'textarea'
+          ? 'textarea'
+          : type === 'select'
+            ? 'select'
+            : 'input';
+
+      const input = element(tag);
+      input.name = key;
+
+      if (type === 'select') {
+        const options = [
+          ['TRUE', '접수 중'],
+          ['FALSE', '접수 닫기']
+        ];
+
+        for (const [value, text] of options) {
+          const option = element('option', text);
+          option.value = value;
+          input.append(option);
+        }
+      } else if (type === 'textarea') {
+        input.rows = 3;
+        input.maxLength = 2000;
+      } else {
+        input.type = type || 'text';
+        input.maxLength = 500;
+      }
+
+      input.required = required.has(key);
+      input.value = values[key] || '';
+
+      wrapper.append(input);
+      container.append(wrapper);
+    }
+  }
+
+  async function loadContent() {
+    if (!hasSession()) {
+      return;
+    }
+
+    const current = session;
+    contentReady = false;
+
+    $('#admin-content-form [type=submit]').disabled = true;
+    $('#admin-content-status').textContent =
+      '행사 정보를 불러오는 중입니다.';
+
+    try {
+      const result = await authenticated('adminGetContent');
+
+      if (current !== session) {
+        return;
+      }
+
+      if (
+        !result.content ||
+        typeof result.revision !== 'string'
+      ) {
+        throw new Error('행사 정보를 확인하지 못했습니다.');
+      }
+
+      revision = result.revision;
+      contentReady = true;
+
+      buildContentForm(result.content);
+
+      $('#admin-content-status').textContent = '';
+      $('#admin-content-form [type=submit]').disabled = false;
+    } catch (error) {
+      if (current === session) {
+        $('#admin-content-status').textContent =
+          unsupported(error);
+      }
+    }
+  }
+
+  async function selectTab(value) {
+    tab = value;
+
+    $('#admin-registrations').hidden =
+      tab !== 'registrations';
+
+    $('#admin-content').hidden =
+      tab !== 'content';
+
+    document
+      .querySelectorAll('[data-admin-tab]')
+      .forEach(button => {
+        const active = button.dataset.adminTab === tab;
+
+        button.classList.toggle('selected', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+
+    if (tab === 'content') {
+      await loadContent();
+    } else {
+      await loadList();
+    }
+  }
+
+  // 관리자 창 열기·닫기
+  $('#admin-open').addEventListener('click', () => {
+    const loggedIn = hasSession();
+
+    dialog.showModal();
+
+    if (loggedIn) {
+      $('#admin-logout').focus();
+    } else {
+      loginForm.elements.password.focus();
+    }
+  });
+
+  dialog.addEventListener('close', () => {
+    if (!password) {
+      logout();
+    } else {
+      hasSession();
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      hasSession();
+    }
+  });
+
+  $('#admin-logout').addEventListener('click', () => {
+    logout('로그아웃되었습니다.');
+  });
+
+  // 로그인
+  loginForm.addEventListener('submit', async event => {
+    event.preventDefault();
+
+    const button = loginForm.querySelector('button');
+
+    if (button.disabled || !loginForm.reportValidity()) {
+      return;
+    }
+
+    const current = ++session;
+    const candidate = loginForm.elements.password.value;
+
+    button.disabled = true;
+    message('로그인 확인 중입니다.');
+
+    try {
+      const result = await post('adminSummary', {
+        password: candidate
+      });
+
+      if (current !== session) {
+        return;
+      }
+
+      if (
+        !Number.isInteger(result.count) ||
+        !Number.isInteger(result.attendanceCount)
+      ) {
+        throw new Error('관리자 응답을 확인하지 못했습니다.');
+      }
+
+      startSession(candidate);
+      loginForm.reset();
+
+      $('#admin-login').hidden = true;
+      dashboard.hidden = false;
+      $('#admin-title').textContent = '행사 운영 관리';
+
+      message(
+        '로그인되었습니다. 로그인 상태는 30분간 유지됩니다.'
+      );
+
+      summary(result);
+      await selectTab('registrations');
+    } catch (error) {
+      if (current === session) {
+        message(error.message);
+        loginForm.reset();
+      }
+    } finally {
+      if (current === session) {
+        button.disabled = false;
+      }
+    }
+  });
+
+  // 탭·검색·페이지 이동
+  document
+    .querySelectorAll('[data-admin-tab]')
+    .forEach(button => {
+      button.addEventListener('click', () => {
+        selectTab(button.dataset.adminTab);
+      });
+    });
+
+  $('#admin-search').addEventListener('submit', event => {
+    event.preventDefault();
+    page = 1;
+    loadList();
+  });
+
+  $('#admin-prev').addEventListener('click', () => {
+    if (page > 1) {
+      page--;
+      loadList();
+    }
+  });
+
+  $('#admin-next').addEventListener('click', () => {
+    if (page < pages) {
+      page++;
+      loadList();
+    }
+  });
+
+  $('#admin-content-reload').addEventListener('click', () => {
+    if (
+      !contentReady ||
+      window.confirm(
+        '저장하지 않은 변경 내용을 버리고 다시 불러오시겠습니까?'
+      )
+    ) {
+      loadContent();
+    }
+  });
+
+  // 행사 정보 저장
+  $('#admin-content-form').addEventListener(
+    'submit',
+    async event => {
+      event.preventDefault();
+
+      const form = event.currentTarget;
+
+      if (!contentReady || !form.reportValidity()) {
+        return;
+      }
+
+      const current = session;
+      const button = form.querySelector('[type=submit]');
+      const content = Object.fromEntries(new FormData(form));
+
+      button.disabled = true;
+      $('#admin-content-status').textContent = '저장 중입니다.';
+
+      try {
+        const result = await authenticated(
+          'adminSaveContent',
+          {
+            content,
+            revision
+          }
+        );
+
+        if (current !== session) {
+          return;
+        }
+
+        if (
+          !result.content ||
+          typeof result.revision !== 'string'
+        ) {
+          throw new Error(
+            '저장 결과를 확인하지 못했습니다. 다시 불러온 뒤 확인해 주세요.'
+          );
+        }
+
+        revision = result.revision;
+        applyContent(result.content);
+
+        $('#admin-content-status').textContent =
+          '저장했습니다. 사이트에 변경 내용을 반영했습니다.';
+
+        if (typeof loadRegistrationSettings === 'function') {
+          await loadRegistrationSettings();
+        }
+      } catch (error) {
+        if (current === session) {
+          $('#admin-content-status').textContent =
+            error.message;
+        }
+      } finally {
+        if (current === session) {
+          button.disabled = false;
+        }
+      }
+    }
+  );
+
+  // 공개 행사 정보 반영
+  if (window.RegistrationAPI.endpoint()) {
+    post('getPublicContent')
+      .then(result => applyContent(result.content))
+      .catch(() => {});
+  }
+})();
+  

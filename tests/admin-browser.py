@@ -64,16 +64,22 @@ with sync_playwright() as p:
     page.wait_for_selector('.admin-person')
     assert page.locator('#admin-form [name=password]').input_value() == ''
     assert page.locator('.admin-person a[href="tel:01012345678"]').count() == 1
-    assert page.locator('.admin-person a[href="sms:01012345678"]').count() == 1
-    page.locator('.admin-person summary').click()
+    assert page.locator('.admin-person a[href^="sms:01012345678"]').count() == 1
+    def open_details():
+        page.wait_for_selector('.admin-person')
+        if not page.locator('.admin-person details').first.evaluate('d=>d.open'):
+            page.locator('.admin-person .admin-person-name').first.click()
+    open_details()
     assert page.locator('.admin-person dd').last.inner_text() == '<script>unsafe()</script>'
     assert page.locator('.admin-person script').count() == 0
     page.get_by_role('button', name='출석 확인', exact=True).click()
     page.wait_for_function("document.querySelector('#admin-attendance').textContent==='1'")
+    open_details()
     page.get_by_role('button', name='접수 취소', exact=True).click()
     page.wait_for_function("document.querySelector('#admin-cancelled').textContent==='1'")
     page.locator('#admin-search [name=status]').select_option('CANCELLED')
     page.locator('#admin-search button').click()
+    open_details()
     page.get_by_role('button', name='접수 복원', exact=True).click()
     page.wait_for_function("document.querySelector('#admin-count').textContent==='1'")
     page.locator('[data-admin-tab=content]').click()
@@ -90,7 +96,7 @@ with sync_playwright() as p:
     assert page.evaluate('sessionStorage.length') == 0
     page.set_viewport_size({'width': 375, 'height': 812})
     assert page.locator('#admin').evaluate('(node)=>node.scrollWidth<=node.clientWidth')
-    page.screenshot(path='/workspace/scratch/admin-mobile.png')
+    page.screenshot(path='/tmp/admin-mobile.png')
     page.locator('#admin-logout').click()
     assert not page.locator('#admin-dashboard').is_visible()
     assert page.locator('.admin-person').count() == 0

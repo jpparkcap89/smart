@@ -48,3 +48,13 @@ function doPost(e) {
 - ‘전화’와 ‘문자’는 사용 중인 기기의 전화·문자 앱을 엽니다. 사이트에서 자동 발신·자동 발송하지 않습니다.
 
 로컬 검증: `node tests/admin-backend.test.cjs`. 로컬 정적 서버 실행 후 `python3 tests/admin-browser.py`, `python3 tests/registration-browser.py`를 실행합니다. 이 검증은 모의 API/시트로 실행하며 실제 서버 적용 여부와 구분해야 합니다.
+
+## 관리자 비밀번호 보관 (2026-11-04 추가)
+
+관리자 비밀번호는 Settings 시트에 평문으로 두지 않고 스크립트 속성에 해시로 보관합니다.
+
+1. Settings 시트 `adminPassword` 칸에 새 비밀번호(10자 이상 권장)를 적습니다.
+2. Apps Script 편집기에서 `saveAdminPasswordFromSheet` 함수를 실행합니다.
+3. 칸이 `(스크립트 속성에 저장됨)`으로 바뀌면 완료입니다.
+
+로그인에 실패하면 응답이 1.5초 늦어지고, 10분 안에 전체 실패가 50회를 넘으면 잠시 잠깁니다.
